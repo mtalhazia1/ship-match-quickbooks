@@ -15,7 +15,7 @@ Starting DB backup: `%TEMP%\db.sqlite3.bak-session09-start`. Issue ids continue 
 ## 2. New issues
 
 **QA-078 — Low — Static files are cached for only 60 seconds and have no content hash in the name**
-With `DEBUG` off, WhiteNoise sends `Cache-Control: max-age=60` for every static file, including the 1.5 MB Swagger bundle, the 1.8 MB pdf.js files and the fonts, and the files are named `app.css`, `app.js` and so on. Browsers recheck them each minute (a cheap `304`, but it is a request per file per page), and a deploy cannot be cached for a year safely. Only gzip is produced, not brotli. Using `ManifestStaticFilesStorage` (hashed names) with a long `WHITENOISE_MAX_AGE`, or the proxy's cache rules in `deploy/Caddyfile`, would fix both. This refines QA-063: compression works, caching is the gap.
+With `DEBUG` off, WhiteNoise sends `Cache-Control: max-age=60` for every static file, including the 1.5 MB Swagger bundle, the 1.8 MB pdf.js files and the fonts, and the files are named `app.css`, `app.js` and so on. Browsers recheck them each minute (a cheap `304`, but it is a request per file per page), and a deploy cannot be cached for a year safely. Only gzip is produced, not brotli. Using `ManifestStaticFilesStorage` (hashed names) with a long `WHITENOISE_MAX_AGE`, or the proxy's cache rules in `deploy/Caddyfile`, would fix both. This refines QA-063: compression works, caching is the gap. **Fixed** afterwards: the production storage is now `CompressedManifestStaticFilesStorage`; hashed files (`app.62789796a252.css`) are sent with `Cache-Control: max-age=315360000, public, immutable` and gzip. Brotli is not added (needs the `brotli` package).
 
 ## 3. Notes (not issues)
 

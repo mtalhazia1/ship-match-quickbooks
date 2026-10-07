@@ -5,7 +5,7 @@ Period: 3–4 Oct 2026. Method: exploratory testing in the in-app browser, issue
 
 **Totals:** 73 numbered issues (QA-001 … QA-074; QA-047 was never used). 2 Critical/High-security, 5 High/Medium-high, 22 Medium, 36 Low, 8 "verify / decide". Session 07 added QA-065 … QA-074 and widened QA-002, QA-003, QA-010, QA-025. Several were re-explained or downgraded later; the table below uses the latest understanding.
 
-**Session 09 (7 Oct 2026) added one open issue:** QA-078 (Low: static files are cached for 60 seconds and not content-hashed; refines QA-063). It also re-checked the earlier fixes in the browser (all held) and ran search-input and cross-tenant sweeps with no findings.
+**Session 09 (7 Oct 2026) added one open issue:** QA-078 (Low: static files were cached for 60 seconds and not content-hashed; refines QA-063), now fixed with hashed file names and an immutable cache header. It also re-checked the earlier fixes in the browser (all held) and ran search-input and cross-tenant sweeps with no findings.
 
 ---
 
