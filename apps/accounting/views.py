@@ -96,7 +96,24 @@ def qbo_settings(request, org_id):
         if not conn:
             messages.error(request, "QuickBooks isn't connected, so there is no default account to save.")
             return redirect("accounting:settings", org_id=org.pk)
-        conn.default_expense_account_id = request.POST.get("default_expense_account_id", "")[:40]
+        chosen = request.POST.get("default_expense_account_id", "").strip()
+        if chosen:
+            if not chosen.isdigit() or len(chosen) > 40:
+                messages.error(request, "Choose one of the accounts in the list.")
+                return redirect("accounting:settings", org_id=org.pk)
+            active_now = active_connection(org)
+            if active_now is not None and active_now.pk == conn.pk and active_now.system == conn.system:
+                try:
+                    known = {str(a["id"]) for a in provider_for(org).expense_accounts()}
+                except Exception:   # the account list can't be read right now, so the choice can't be checked
+                    messages.error(request, "Couldn't check the account with QuickBooks just now, so nothing was "
+                                            "saved. Try again in a moment.")
+                    return redirect("accounting:settings", org_id=org.pk)
+                if chosen not in known:
+                    messages.error(request, "That account isn't one of your QuickBooks expense accounts. "
+                                            "Choose one from the list.")
+                    return redirect("accounting:settings", org_id=org.pk)
+        conn.default_expense_account_id = chosen
         conn.save(update_fields=["default_expense_account_id"])
         audit(org, "qbo.default_account", conn, actor=request.user, account=conn.default_expense_account_id)
         messages.success(request, "Default expense account saved.")

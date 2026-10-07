@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.humanize",
+    "ninja",   # serves the API reference page's Swagger UI from our own static files, not a public CDN
     "apps.core",
     "apps.accounts",
     "apps.documents",

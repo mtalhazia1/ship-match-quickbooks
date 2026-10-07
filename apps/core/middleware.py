@@ -154,7 +154,7 @@ class SecurityHeadersMiddleware:
     docs page are excluded because they ship their own inline code.
     """
 
-    EXEMPT_PREFIXES = ("/admin/", "/api/docs")
+    EXEMPT_PREFIXES = ("/admin/",)
 
     def __init__(self, get_response):
         self.get_response = get_response

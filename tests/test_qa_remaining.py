@@ -344,3 +344,92 @@ def test_journal_describes_goods_lines_as_goods():
         pytest.skip(f"stub report not accepted: {e}")
     by_account = {r["account"]: r["description"] for r in rows}
     assert by_account["Inventory"].startswith("Goods accrual") and by_account["Freight expense"].startswith("Freight accrual")
+
+
+# ---------------------------------------------------------------- QA-075: the default expense account must exist
+
+
+class _Accounts:
+    def __init__(self, ids=("69", "77"), fail=False):
+        self.ids, self.fail = ids, fail
+
+    def expense_accounts(self):
+        if self.fail:
+            raise RuntimeError("QuickBooks is down")
+        return [{"id": i, "name": f"Account {i}", "type": "Expense"} for i in self.ids]
+
+
+@pytest.fixture
+def qbo(org, admin_user, client, monkeypatch):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.accounting.models import QBOConnection
+
+    conn = QBOConnection.objects.create(organization=org, realm_id="1", access_token="t", refresh_token="r",
+                                        access_expires_at=timezone.now() + timedelta(hours=1),
+                                        default_expense_account_id="69")
+    state = _Accounts()
+    monkeypatch.setattr("apps.accounting.views.provider_for", lambda o: state)
+    client.force_login(admin_user)
+    return conn, state, reverse("accounting:settings", args=[org.pk])
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("bad", ["999999", "abc", "<script>", "6" * 41])
+def test_default_expense_account_must_be_in_the_list(client, qbo, bad):
+    conn, _, url = qbo
+    text = client.post(url, {"default_expense_account_id": bad}, follow=True).content.decode()
+    assert "saved." not in text and ("Choose" in text or "isn&#x27;t one of your" in text)
+    conn.refresh_from_db()
+    assert conn.default_expense_account_id == "69"
+
+
+@pytest.mark.django_db
+def test_default_expense_account_can_be_changed_or_cleared(client, qbo):
+    conn, state, url = qbo
+    assert "Default expense account saved." in client.post(url, {"default_expense_account_id": "77"},
+                                                           follow=True).content.decode()
+    conn.refresh_from_db()
+    assert conn.default_expense_account_id == "77"
+    client.post(url, {"default_expense_account_id": ""})
+    conn.refresh_from_db()
+    assert conn.default_expense_account_id == ""
+
+
+@pytest.mark.django_db
+def test_default_expense_account_not_saved_when_quickbooks_cannot_be_asked(client, qbo):
+    conn, state, url = qbo
+    state.fail = True
+    text = client.post(url, {"default_expense_account_id": "77"}, follow=True).content.decode()
+    assert "nothing was saved" in text
+    conn.refresh_from_db()
+    assert conn.default_expense_account_id == "69"
+
+
+# ---------------------------------------------------------------- QA-076: long host names are shortened in messages
+
+
+def test_long_host_names_are_shortened_in_webhook_errors():
+    from apps.integrations import urlguard
+
+    host = "a" * 300 + ".com"
+    with pytest.raises(urlguard.URLRejected) as e:
+        urlguard.check_url(f"https://{'a' * 300}/x")
+    assert len(str(e.value)) < 200
+    assert urlguard._shown(host).endswith("…") and len(urlguard._shown(host)) == 60
+    assert urlguard._shown("example.com") == "example.com"
+
+
+# ---------------------------------------------------------------- QA-077: the API reference needs no public CDN
+
+
+@pytest.mark.django_db
+def test_api_reference_uses_local_files_and_the_app_policy(client, api_user, org):
+    r = client.get("/api/docs")
+    page = r.content.decode()
+    assert r.status_code == 200
+    assert "/static/ninja/swagger-ui-bundle.js" in page and "/static/ninja/swagger-ui.css" in page
+    assert "cdn.jsdelivr.net" not in page and "django-ninja.dev" not in page
+    assert "script-src 'self'" in r["Content-Security-Policy"]

@@ -42,6 +42,11 @@ def is_public(ip: str) -> bool:
                                         or addr.is_multicast or addr.is_reserved or addr.is_unspecified))
 
 
+def _shown(host: str, limit: int = 60) -> str:
+    """A host name for an error message: a very long one is cut short."""
+    return host if len(host) <= limit else host[: limit - 1] + "…"
+
+
 def check_url(raw: str) -> str:
     """Syntax and host checks without DNS. Returns the cleaned URL."""
     url = (raw or "").strip()
@@ -76,7 +81,7 @@ def check_url(raw: str) -> str:
             raise URLRejected("That address points to a private or local network. Webhooks only go to public "
                               "internet addresses.")
     elif host == "localhost" or host.endswith(BLOCKED_SUFFIXES) or "." not in host:
-        raise URLRejected(f"{host} is a local name. Webhooks only go to public internet addresses.")
+        raise URLRejected(f"{_shown(host)} is a local name. Webhooks only go to public internet addresses.")
     return url
 
 
@@ -85,17 +90,17 @@ def resolve_public(host: str, port: int) -> list[str]:
     try:
         infos = _getaddrinfo(host, port, type=socket.SOCK_STREAM)
     except (socket.gaierror, UnicodeError, OSError):
-        raise URLRejected(f"ShipMatch couldn't find {host}. Check the address for typos.", permanent=False)
+        raise URLRejected(f"ShipMatch couldn't find {_shown(host)}. Check the address for typos.", permanent=False)
     ips = []
     for info in infos:
         ip = info[4][0]
         if ip not in ips:
             ips.append(ip)
     if not ips:
-        raise URLRejected(f"ShipMatch couldn't find {host}. Check the address for typos.", permanent=False)
+        raise URLRejected(f"ShipMatch couldn't find {_shown(host)}. Check the address for typos.", permanent=False)
     private = [ip for ip in ips if not is_public(ip)]
     if private:
-        raise URLRejected(f"{host} points to a private or local network address, so ShipMatch won't send to it. "
+        raise URLRejected(f"{_shown(host)} points to a private or local network address, so ShipMatch won't send to it. "
                           "Webhooks only go to public internet addresses.")
     return ips
 
