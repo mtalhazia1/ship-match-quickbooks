@@ -208,9 +208,24 @@ def merge_shipments(source: Shipment, target: Shipment) -> None:
     audit(target.organization, "shipment.merged", target, merged_from=ref)
 
 
+class ShipmentGone(Exception):
+    """The shipment a document was being moved to was removed by someone else a moment ago."""
+
+
+@transaction.atomic
 def assign_manually(doc: Document, shipment: Shipment, user) -> None:
-    """Reviewer moves a document to a shipment. The old shipment is deleted if left empty."""
+    """Reviewer moves a document to a shipment. The old shipment is deleted if left empty.
+
+    Both shipments are locked (in id order, so two moves can't wait on each other) before anything is checked:
+    otherwise a move into a shipment that another move is emptying fails, or the shipment is deleted just after
+    the document landed in it."""
     old = doc.match.shipment if hasattr(doc, "match") else None
+    wanted = sorted({shipment.pk} | ({old.pk} if old else set()))
+    alive = set(Shipment.objects.select_for_update().filter(pk__in=wanted).order_by("pk").values_list("pk", flat=True))
+    if shipment.pk not in alive:
+        raise ShipmentGone(shipment.reference)
+    if old and old.pk not in alive:
+        old = None
     MatchLink.objects.update_or_create(
         document=doc,
         defaults={"shipment": shipment, "method": MatchLink.Method.MANUAL, "score": 1.0,

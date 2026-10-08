@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.db.models import Count, Q
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -28,7 +28,7 @@ from apps.documents.services.corrections import EDITABLE, FieldValueError, after
 from apps.documents.services.ingest import RejectedFile, ingest_bytes
 from apps.shipments.models import Approval, Shipment, ValidationIssue
 from apps.shipments.services.approval import approval_blockers, posting_blockers, shipment_totals
-from apps.shipments.services.matching import assign_manually
+from apps.shipments.services.matching import ShipmentGone, assign_manually
 from apps.shipments.services.timeline import timeline
 from apps.shipments.services.validation import update_status, validate_shipment
 from apps.shipments.templatetags.review_tags import label
@@ -441,8 +441,16 @@ def move_document(request, pk):
     if shipment.is_locked:
         messages.error(request, f"{shipment.reference} is locked, so documents can't be added to it.")
         return _after_doc_change(doc)
-    assign_manually(doc, shipment, request.user)
-    validate_shipment(shipment)
+    try:
+        assign_manually(doc, shipment, request.user)
+    except ShipmentGone:
+        messages.error(request, "That shipment was removed a moment ago. Choose another one.")
+        return _after_doc_change(doc)
+    try:
+        validate_shipment(shipment)
+    except DatabaseError:   # someone moved this same document on again and the shipment was removed meanwhile
+        messages.warning(request, "This document was moved by someone else at the same moment. Check where it is now.")
+        return _after_doc_change(doc)
     if current and current.pk != shipment.pk and Shipment.objects.filter(pk=current.pk).exists():
         validate_shipment(current)
     messages.success(request, f"Moved {doc.original_filename} to {shipment.reference}.")

@@ -1,9 +1,11 @@
-# ShipMatch QA — prioritised summary of sessions 01–11
+# ShipMatch QA — prioritised summary of sessions 01–12
 
 Period: 3–4 Oct 2026. Method: exploratory testing in the in-app browser, issues listed only (nothing was fixed), against the local demo data plus the empty **Northwind Traders (test)** org for destructive tests. Detail, repro steps and evidence are in the per-session logs:
-[01 platform sweep](QA_SESSION_01.md) · [02 approval loop](QA_SESSION_02.md) · [03 disputes & month-end](QA_SESSION_03.md) · [04 intake & integrations](QA_SESSION_04.md) · [05 accounts & admin](QA_SESSION_05.md) · [06 cross-cutting](QA_SESSION_06.md) · [07 gap closing](QA_SESSION_07.md) · [08 webhooks, accounting, DEBUG off](QA_SESSION_08.md) · [09 static files, re-check, tenant sweep](QA_SESSION_09.md) · [10 concurrency](QA_SESSION_10.md) · [11 exports, reset, caching](QA_SESSION_11.md)
+[01 platform sweep](QA_SESSION_01.md) · [02 approval loop](QA_SESSION_02.md) · [03 disputes & month-end](QA_SESSION_03.md) · [04 intake & integrations](QA_SESSION_04.md) · [05 accounts & admin](QA_SESSION_05.md) · [06 cross-cutting](QA_SESSION_06.md) · [07 gap closing](QA_SESSION_07.md) · [08 webhooks, accounting, DEBUG off](QA_SESSION_08.md) · [09 static files, re-check, tenant sweep](QA_SESSION_09.md) · [10 concurrency](QA_SESSION_10.md) · [11 exports, reset, caching](QA_SESSION_11.md) · [12 PostgreSQL](QA_SESSION_12.md)
 
 **Totals:** 73 numbered issues (QA-001 … QA-074; QA-047 was never used). 2 Critical/High-security, 5 High/Medium-high, 22 Medium, 36 Low, 8 "verify / decide". Session 07 added QA-065 … QA-074 and widened QA-002, QA-003, QA-010, QA-025. Several were re-explained or downgraded later; the table below uses the latest understanding.
+
+**Session 12 (8 Oct 2026, first run on PostgreSQL) added two issues, both fixed the same day:** QA-083 (the dispute settings page crashed on a reply-to address over 254 characters: SQLite does not enforce column lengths, Postgres does) and QA-084 (moving a document into a shipment that another request was emptying gave a 500 and could delete a shipment just after a document landed in it). All migrations, the demo build and the test suite (1,063 passing, one timing-flaky test, now made deterministic) work on Postgres; the row-lock fixes from session 10 hold on real row locks.
 
 **Session 11 (8 Oct 2026) added one open issue:** QA-082 (Low, verify: signed-in pages and downloads send no `Cache-Control`; the file view allows 5 minutes of private caching). It also checked spreadsheet formula injection across 3 Excel files, 4 CSV exports and 3 API exports (all safe) and the password-reset flow (does not reveal which addresses have accounts).
 

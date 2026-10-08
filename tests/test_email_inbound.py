@@ -202,8 +202,9 @@ def test_gmail_forwarding_confirmation_code_is_shown(client, org, address):
 
 
 @pytest.mark.django_db
-def test_inbound_rate_limit_asks_the_provider_to_retry(client, org, address, settings):
+def test_inbound_rate_limit_asks_the_provider_to_retry(client, org, address, settings, monkeypatch):
     settings.INBOUND_EMAIL_RATE_PER_MINUTE = 1
+    monkeypatch.setattr("apps.mailboxes.webhooks.time.time", lambda: 1_800_000_030.0)   # both posts in one minute
     assert post_postmark(client, postmark_payload(address)).status_code == 200
     r = post_postmark(client, postmark_payload(address, message_id="<second@x>"))
     assert r.status_code == 429 and r["Retry-After"] == "60"

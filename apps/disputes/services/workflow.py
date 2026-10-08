@@ -82,10 +82,13 @@ def clean_emails(raw: str, label: str, required: bool = False) -> list[str]:
     if required and not emails:
         raise DisputeError(f"Add the {label}.")
     for e in emails:
+        shown = e if len(e) <= 60 else e[:59] + "…"
+        if len(e) > 254:   # the longest address an email can have; longer values don't fit the database column
+            raise DisputeError(f"“{shown}” is too long for an email address. Check the {label}.")
         try:
             validate_email(e)
         except ValidationError:
-            raise DisputeError(f"“{e}” is not a valid email address. Check the {label}.")
+            raise DisputeError(f"“{shown}” is not a valid email address. Check the {label}.")
     return emails
 
 

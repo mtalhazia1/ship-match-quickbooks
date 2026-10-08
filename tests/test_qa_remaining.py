@@ -499,3 +499,89 @@ def test_normal_approve_reject_and_reopen_still_work(client, approver, org):
     client.post(reverse("review:reopen", args=[a.pk]))
     a.refresh_from_db()
     assert a.status != Shipment.Status.APPROVED
+
+
+# ---------------------------------------------------------------- Postgres: values the database would refuse
+
+
+@pytest.mark.django_db
+def test_dispute_settings_reject_a_reply_to_address_that_does_not_fit(client, admin_user, org):
+    from apps.disputes.models import DisputeSettings
+
+    client.force_login(admin_user)
+    long_address = "a" * 250 + "@example.com"
+    r = client.post(reverse("disputes:settings"), {"reply_to": long_address, "signature": "Thanks", "follow_up_days": "7"},
+                    follow=True)
+    assert r.status_code == 200 and "too long for an email address" in r.content.decode()
+    assert long_address not in r.content.decode()                       # not echoed back in full
+    assert DisputeSettings.for_org(org).reply_to == ""
+    r = client.post(reverse("disputes:settings"), {"reply_to": "ap@example.com", "follow_up_days": "7"}, follow=True)
+    assert "Dispute settings saved." in r.content.decode()
+
+
+# ---------------------------------------------------------------- Postgres: moving a document into a vanished shipment
+
+
+def _doc_in(org, shipment, n):
+    from apps.documents.models import Document
+    from apps.shipments.models import MatchLink
+
+    doc = Document.objects.create(organization=org, original_filename=f"m{n}.pdf", file=f"test/m{n}.pdf",
+                                  sha256=f"{n:064d}", status=Document.Status.MATCHED, doc_type="freight_invoice")
+    MatchLink.objects.create(document=doc, shipment=shipment, method="manual", score=1)
+    return doc
+
+
+@pytest.mark.django_db
+def test_moving_into_a_shipment_that_was_just_removed_is_refused_cleanly(org, user):
+    from apps.documents.models import Document
+    from apps.shipments.services.matching import ShipmentGone, assign_manually
+
+    source = Shipment.objects.create(organization=org, bl_number="SRC")
+    gone = Shipment.objects.create(organization=org, bl_number="GONE")
+    doc = _doc_in(org, source, 1)
+    stale_target = Shipment.objects.get(pk=gone.pk)
+    Shipment.objects.filter(pk=gone.pk).delete()                 # another person emptied and removed it
+    with pytest.raises(ShipmentGone):
+        assign_manually(Document.objects.get(pk=doc.pk), stale_target, user)
+    assert Document.objects.get(pk=doc.pk).match.shipment_id == source.pk     # the document stayed where it was
+
+
+@pytest.mark.django_db
+def test_move_view_explains_a_removed_target_and_a_normal_move_still_works(client, approver, org, monkeypatch):
+    from apps.shipments.services import matching
+
+    source = Shipment.objects.create(organization=org, bl_number="S2")
+    target = Shipment.objects.create(organization=org, bl_number="T2")
+    first, second = _doc_in(org, source, 2), _doc_in(org, source, 3)
+    client.force_login(approver)
+
+    real = matching.assign_manually
+    monkeypatch.setattr("apps.shipments.views.assign_manually",
+                        lambda *a, **k: (_ for _ in ()).throw(matching.ShipmentGone("SHP-1")))
+    text = client.post(reverse("review:move_document", args=[first.pk]), {"target": str(target.pk)},
+                       follow=True).content.decode()
+    assert "removed a moment ago" in text
+
+    monkeypatch.setattr("apps.shipments.views.assign_manually", real)
+    client.post(reverse("review:move_document", args=[second.pk]), {"target": str(target.pk)})
+    second.refresh_from_db()
+    assert second.match.shipment_id == target.pk
+    assert Shipment.objects.filter(pk=source.pk).exists()        # still holds the first document
+
+
+@pytest.mark.django_db
+def test_move_survives_the_target_vanishing_while_it_is_checked(client, approver, org, monkeypatch):
+    from django.db import DatabaseError
+
+    source = Shipment.objects.create(organization=org, bl_number="S3")
+    target = Shipment.objects.create(organization=org, bl_number="T3")
+    doc = _doc_in(org, source, 4)
+    client.force_login(approver)
+
+    def vanished(shipment):
+        raise DatabaseError("Save with update_fields did not affect any rows.")
+
+    monkeypatch.setattr("apps.shipments.views.validate_shipment", vanished)
+    r = client.post(reverse("review:move_document", args=[doc.pk]), {"target": str(target.pk)}, follow=True)
+    assert r.status_code == 200 and "moved by someone else at the same moment" in r.content.decode()
