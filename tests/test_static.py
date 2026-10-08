@@ -36,3 +36,21 @@ def test_production_static_manifest_has_every_file_templates_ask_for(settings, t
             asked |= set(re.findall(r"""\{%\s*static\s+['"]([^'"]+)['"]""", html.read_text(encoding="utf-8")))
     assert asked, "no {% static %} tags found: the pattern above is out of date"
     assert sorted(asked - set(manifest)) == []
+
+
+def test_urls_load_in_production_before_collectstatic(settings, tmp_path):
+    """The production container runs migrate (whose checks import the URLs) before collectstatic, so nothing may
+    look up a hashed static name at import time."""
+    import importlib
+
+    import config.urls
+
+    settings.STATIC_ROOT = tmp_path   # empty: no manifest yet
+    settings.STORAGES = {**settings.STORAGES,
+                         "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"}}
+    try:
+        importlib.reload(config.urls)
+    finally:
+        settings.STORAGES = {**settings.STORAGES,
+                             "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}}
+        importlib.reload(config.urls)

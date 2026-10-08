@@ -4,7 +4,6 @@ from django.contrib import admin
 from django.shortcuts import redirect
 from django.templatetags.static import static as static_url
 from django.urls import include, path, reverse
-from django.views.generic import RedirectView
 
 from apps.api import api
 from apps.core import views as core_views
@@ -22,7 +21,9 @@ admin.site.site_title = "ShipMatch admin"
 
 urlpatterns = [
     path("", lambda r: redirect("core:dashboard")),
-    path("favicon.ico", RedirectView.as_view(url=static_url("img/favicon.svg"), permanent=True)),
+    # Looked up per request: production names carry a content hash, known only once collectstatic has run
+    # (after migrate, whose checks import this file). Not permanent, as the hash changes with the file.
+    path("favicon.ico", lambda r: redirect(static_url("img/favicon.svg"))),
     path("health/", core_views.health, name="health"),
     path("health/ready/", core_views.ready, name="ready"),
     path("admin/login/", admin_login),
