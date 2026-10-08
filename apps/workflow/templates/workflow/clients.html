@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}All clients{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>All clients</h1>
+    <p class="lede">Every organization you work in, with what is waiting in each. Numbers are live. Open a client to switch to it.</p>
+  </div>
+  <div class="actions">
+    <a class="btn" href="{% url 'workflow:my_work' %}">{% icon "user-check" %} My work across clients</a>
+    {% if can_create %}
+    <details class="reveal popover" data-focus data-menu>
+      <summary class="btn btn-primary">{% icon "plus" %} New client organization</summary>
+      <form class="pop-form" method="post" action="{% url 'workflow:create_org' %}">{% csrf_token %}
+        <div><label class="lbl" for="wf-org-name">Client name</label><input class="w-full" id="wf-org-name" type="text" name="name" maxlength="200" required placeholder="For example: Harbor Foods Inc."></div>
+        <div class="form-grid" style="grid-template-columns:1fr 2fr">
+          <div><label class="lbl" for="wf-org-cur">Home currency</label><input class="w-full" id="wf-org-cur" type="text" name="home_currency" value="{{ org.home_currency|default:'USD' }}" maxlength="3" required></div>
+          <div><label class="lbl" for="wf-org-tz">Time zone</label>
+            <select class="w-full" id="wf-org-tz" name="timezone">{% for z in zones %}<option value="{{ z }}"{% if z == org.timezone %} selected{% endif %}>{{ z }}</option>{% endfor %}<option value="UTC"{% if org.timezone == "UTC" %} selected{% endif %}>UTC</option></select></div>
+        </div>
+        <div><label class="lbl" for="wf-org-copy">Copy controls from</label>
+          <select class="w-full" id="wf-org-copy" name="copy_from">
+            <option value="">Start with the defaults</option>
+            {% for o in copy_choices %}<option value="{{ o.pk }}"{% if o.pk == org.pk %} selected{% endif %}>{{ o.name }}</option>{% endfor %}
+          </select>
+          <p class="hint">Copies two-factor requirement, maker-checker, review threshold and exchange rates. Nothing else (no documents, people or connections).</p></div>
+        <p class="hint">You become its admin. Invite the client's team and connect their QuickBooks or Xero next.</p>
+        <div><button class="btn btn-primary" type="submit">Create organization</button></div>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+</div>
+
+<div class="kpis">
+  <div class="kpi{% if totals.needs_review %} attention{% endif %}"><div class="k">Needs review</div><div class="v">{{ totals.needs_review }}</div><div class="d">Across {{ rows|length }} client{{ rows|length|pluralize }}</div></div>
+  <div class="kpi"><div class="k">Ready to approve</div><div class="v">{{ totals.ready }}</div><div class="d">No open issues</div></div>
+  <a class="kpi" href="{% url 'workflow:my_work' %}?kind=assigned"><div class="k">Assigned to you</div><div class="v">{{ totals.assigned }}</div><div class="d">Still open</div></a>
+  <div class="kpi{% if totals.failed or totals.reconnect %} attention{% endif %}"><div class="k">Failed postings</div><div class="v">{{ totals.failed }}</div><div class="d">{% if totals.reconnect %}{{ totals.reconnect }} accounting connection{{ totals.reconnect|pluralize }} to fix{% else %}All connections working{% endif %}</div></div>
+</div>
+
+<section class="card">
+  <div class="table-wrap">
+    <table class="data wf-clients">
+      <caption class="sr-only">Clients, sorted by {{ sort }}. Select a column heading to sort.</caption>
+      <thead><tr>
+        {% for c in columns %}<th scope="col"{% if c.num %} class="num"{% endif %}{% if c.aria %} aria-sort="{{ c.aria }}"{% endif %}><a class="wf-sort{% if c.aria %} on{% endif %}" href="{{ c.url }}">{{ c.label }}{% if c.aria == "ascending" %} <span aria-hidden="true">▲</span>{% elif c.aria == "descending" %} <span aria-hidden="true">▼</span>{% endif %}</a></th>{% endfor %}
+        <th scope="col"><span class="sr-only">Open</span></th>
+      </tr></thead>
+      <tbody>
+      {% for r in rows %}
+      <tr class="{% if org and r.org.pk == org.pk %}wf-current{% endif %}">
+        <td><a class="row-link" href="{% url 'core:dashboard' %}?org={{ r.org.slug }}">{{ r.org.name }}</a>
+          <span class="sub">{{ r.role_label }}{% if org and r.org.pk == org.pk %}, open now{% endif %}</span></td>
+        {% if r.locked %}
+        <td colspan="7"><span class="badge warn">{% icon "lock" %} Requires two-factor</span> <span class="small muted">Turn on two-factor authentication under Security and sign-in to see this client.</span></td>
+        {% else %}
+        <td class="num">{% if r.needs_review %}<a href="{% url 'review:queue' %}?org={{ r.org.slug }}&amp;status=needs_review">{{ r.needs_review }}</a>{% else %}<span class="muted">0</span>{% endif %}</td>
+        <td class="num">{% if r.ready %}<a href="{% url 'review:queue' %}?org={{ r.org.slug }}&amp;status=ready">{{ r.ready }}</a>{% else %}<span class="muted">0</span>{% endif %}</td>
+        <td class="num">{% if r.assigned_to_me %}<a href="{% url 'workflow:my_work' %}?client={{ r.org.slug }}&amp;kind=assigned">{{ r.assigned_to_me }}</a>{% else %}<span class="muted">0</span>{% endif %}</td>
+        <td class="num">{% if r.failed_postings %}<a class="wf-bad" href="{% url 'review:queue' %}?org={{ r.org.slug }}&amp;status=approved">{{ r.failed_postings }}</a>{% else %}<span class="muted">0</span>{% endif %}</td>
+        <td class="nowrap"><span class="badge {% if r.connection == 'ok' %}ok{% elif r.connection == 'reconnect' %}err{% elif r.connection == 'expiring' %}warn{% else %}neutral{% endif %}">{{ r.connection_label }}</span></td>
+        <td class="num nowrap">{% if not r.at_risk %}<span class="muted">None</span>{% elif r.at_risk_home is not None %}{{ r.at_risk_home|money:r.org.home_currency }}{% else %}{% for cur, amount in r.at_risk.items %}{{ amount|money:cur }}{% if not forloop.last %}<br>{% endif %}{% endfor %}{% endif %}</td>
+        <td class="num nowrap">{% if r.oldest_hours is not None %}{{ r.oldest_hours|duration }}{% else %}<span class="muted">–</span>{% endif %}</td>
+        {% endif %}
+        <td class="num"><a class="btn btn-sm" href="{% url 'core:dashboard' %}?org={{ r.org.slug }}">Open</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="10"><div class="empty">{% icon "briefcase" %}<h3>You aren't a member of any organization yet</h3><p class="muted">Ask an admin to invite you.</p></div></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

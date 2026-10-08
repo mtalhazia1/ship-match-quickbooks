@@ -1,0 +1,42 @@
+{% load ui accounting_tags %}{# Dashboard: accounts payable aging of posted bills, from their payment status. #}
+{% ap_aging org as aging %}
+{% if aging and aging.posted or aging and qbo %}
+<section class="card pay-aging">
+  <div class="card-head">
+    <div><h2>Unpaid bills by age</h2>
+      <p>Posted bills not paid yet, by days past their due date, in {{ aging.currency }}.{% if aging.last_checked %} Payments last checked {{ aging.last_checked|timesince }} ago.{% endif %}</p></div>
+    <div class="actions">
+      {% if aging.overdue %}<a class="btn btn-sm" href="{% url 'review:queue' %}?status=all&amp;pay=overdue">Show overdue shipments</a>{% endif %}
+      {% if can.post and qbo and not qbo.needs_reconnect %}
+      <form method="post" action="{% url 'accounting:check_payments' %}">{% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button class="btn btn-sm" type="submit">{% icon "refresh" %} Check payments now</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% if aging.count %}
+  <div class="pay-buckets" role="list">
+    {% for b in aging.buckets %}
+    <div class="pay-bucket{% if b.key != 'current' and b.count %} late{% endif %}" role="listitem">
+      <div class="k">{{ b.label }}</div>
+      <div class="v num">{{ b.amount|money }}</div>
+      <div class="d">{{ b.count }} bill{{ b.count|pluralize }}</div>
+      <span class="pay-bar" aria-hidden="true"><span style="width:{{ b.share }}%"></span></span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card-body muted">{% if aging.posted %}Every posted bill that was checked is paid.{% else %}No bills posted yet. Their payment status appears here once they are in {% if qbo %}{{ qbo.system_name }}{% else %}your accounting system{% endif %}.{% endif %}</div>
+  {% endif %}
+  {% if aging.count or aging.unconverted or aging.credits_open or aging.not_checked or aging.error %}
+  <div class="pay-notes small">
+    {% if aging.count %}<p><strong>{{ aging.total|money:aging.currency }}</strong> unpaid{% if aging.overdue %}, of which <strong>{{ aging.overdue|money:aging.currency }}</strong> is past due{% endif %}.</p>{% endif %}
+    {% if aging.unconverted %}<p>Not included: {% for cur, amount in aging.unconverted.items %}{{ amount|money:cur }}{% if not forloop.last %}, {% endif %}{% endfor %}, because there is no exchange rate for it in Settings.</p>{% endif %}
+    {% if aging.credits_open %}<p>Vendor credits not used yet: {% for cur, amount in aging.credits_open.items %}{{ amount|money:cur }}{% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+    {% if aging.not_checked %}<p class="muted">{{ aging.not_checked }} posted bill{{ aging.not_checked|pluralize }} not checked yet.</p>{% endif %}
+    {% if aging.error %}<p class="pay-warn">{% icon "alert" %}<span>Last check: {{ aging.error }}</span></p>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}

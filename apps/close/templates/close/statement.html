@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% load ui close_tags %}
+{% block title %}Statement from {{ st.vendor_name|default:"a vendor" }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'close:accruals' %}">Month-end</a>{% icon "chevron-right" %}<a href="{% url 'close:statements' %}">Vendor statements</a>{% icon "chevron-right" %}<span>{{ st.vendor_name|default:"Vendor not chosen" }}</span></div>
+    <h1>Statement from {{ st.vendor_name|default:"a vendor not chosen yet" }}</h1>
+    <dl class="meta-grid">
+      <div><dt>Statement date</dt><dd>{{ st.statement_date|date:"j M Y"|default:"Not printed" }}</dd></div>
+      <div><dt>Currency</dt><dd>{{ st.currency|default:"–" }}</dd></div>
+      <div><dt>Lines</dt><dd>{{ lines|length }}</dd></div>
+      <div><dt>Read by</dt><dd>{% if st.reader == "rules" %}Rule reader{% else %}AI ({{ st.reader }}){% endif %}</dd></div>
+      <div><dt>File</dt><dd><a href="{% url 'close:statement_file' st.pk %}">{{ st.original_filename }}</a></dd></div>
+      {% if st.reconciled_at %}<div><dt>Matched</dt><dd>{{ st.reconciled_at|date:"j M Y, H:i" }}</dd></div>{% endif %}
+    </dl>
+  </div>
+  <div class="actions">
+    {% if st.status != "needs_vendor" %}<a class="btn" href="{% url 'close:statement_export' st.pk %}">{% icon "download" %} CSV</a>{% endif %}
+    {% if can_act %}
+    {% if st.status != "needs_vendor" %}<form method="post" action="{% url 'close:statement_rematch' st.pk %}">{% csrf_token %}<button class="btn" type="submit">{% icon "refresh" %} Match again</button></form>{% endif %}
+    <details class="popover" data-focus>
+      <summary class="btn">Correct details</summary>
+      {% include "close/_statement_form.html" %}
+    </details>
+    <details class="popover">
+      <summary class="btn btn-quiet">Delete</summary>
+      <form class="pop-form" method="post" action="{% url 'close:statement_delete' st.pk %}">{% csrf_token %}
+        <p class="small">Delete this statement and its findings? The audit log keeps a record. Documents, shipments and bills are not touched.</p>
+        <button class="btn btn-danger solid btn-sm" type="submit">Delete statement</button>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+</div>
+
+{% if st.status == "needs_vendor" %}
+<div class="decision blocked">{% icon "alert" %}
+  <div class="grow"><strong>Which vendor is this statement from?</strong>
+    {% if st.vendor_name %}ShipMatch read “{{ st.vendor_name }}” but has no invoices under that name.{% else %}The vendor's name couldn't be read.{% endif %}
+    Choose the vendor to match the statement.
+    {% if can_act %}{% include "close/_statement_form.html" with inline=True %}{% else %}<span class="muted">An approver can choose it.</span>{% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if st.notes %}
+<div class="close-notes">{% for n in st.notes %}<p class="intake-note">{% icon "info" %}<span>{{ n }}</span></p>{% endfor %}</div>
+{% endif %}
+
+{% if st.status != "needs_vendor" and summary %}
+<section class="card close-summary">
+  <div class="card-head"><div><h2>Why the balances differ</h2>
+    <p>{% if summary.shape == "activity" %}An activity statement{% if summary.period_start %} from {{ summary.period_start }}{% endif %}: every invoice, credit and payment is listed.{% else %}No payments or opening balance on it, so it is read as the list of what the vendor says is open.{% endif %} Amounts in {{ summary.currency }}.</p></div>
+    {% if open_count %}<span class="tag warning">{{ open_count }} open finding{{ open_count|pluralize }}</span>{% else %}<span class="tag ok">Nothing open</span>{% endif %}
+  </div>
+  <div class="close-balances">
+    <div><div class="k">Vendor's balance</div><div class="v num">{{ summary.statement_balance|money }}</div><div class="d">{% if st.closing_balance is not None %}As printed on the statement{% else %}Sum of the statement's lines{% endif %}</div></div>
+    <div><div class="k">ShipMatch's balance</div><div class="v num">{{ summary.shipmatch_balance|money }}</div><div class="d">Invoices less credits and payments{% if summary.shipmatch_opening %}, from a balance of {{ summary.shipmatch_opening|money }}{% endif %}</div></div>
+    <div class="{% if summary.difference|is_zero %}close-agree{% else %}close-differ{% endif %}"><div class="k">Difference</div><div class="v num">{{ summary.difference|signed }}</div><div class="d">{% if summary.difference|is_zero %}The balances agree{% elif summary.difference|is_negative %}The vendor says you owe less{% else %}The vendor says you owe more{% endif %}</div></div>
+  </div>
+  <div class="table-wrap">
+    <table class="data compact close-explain">
+      <thead><tr><th>Explained by</th><th class="num">Items</th><th class="num">Effect</th></tr></thead>
+      <tbody>
+      {% for s in sections %}{% if not s.effect|is_zero %}
+        <tr><td><a href="#bucket-{{ s.bucket }}">{{ s.label }}</a></td><td class="num">{{ s.items|length }}</td><td class="num">{{ s.effect|signed }}</td></tr>
+      {% endif %}{% endfor %}
+        <tr class="close-total"><td>Explained</td><td></td><td class="num">{{ summary.explained|signed }}</td></tr>
+        <tr class="close-total"><td>Not explained</td><td></td><td class="num">{% if summary.unexplained|is_zero %}<span class="badge ok">0.00</span>{% else %}<span class="badge err">{{ summary.unexplained|signed }}</span>{% endif %}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% for s in sections %}
+{% if s.quiet %}
+<details class="card close-quiet close-collapse" id="bucket-{{ s.bucket }}">
+  <summary class="card-head"><div><h2>{{ s.label }}</h2><p>{{ s.help }}</p></div><span class="num muted">{{ s.items|length }}</span></summary>
+  <div class="table-wrap">
+    <table class="data compact">
+      <thead><tr><th>Item</th><th>Date</th><th class="num">Statement</th><th class="num">ShipMatch</th><th>In ShipMatch</th></tr></thead>
+      <tbody>
+      {% for i in s.items %}
+        <tr><td>{% if i.document_id %}<a href="{% url 'review:document' i.document_id %}">{{ i.label }}</a>{% else %}{{ i.label }}{% endif %}<span class="sub">{{ i.explanation }}</span></td>
+          <td class="nowrap">{% if i.line and i.line.date %}{{ i.line.date|date:"j M Y" }}{% endif %}</td>
+          <td class="num">{% if i.statement_amount is not None %}{{ i.statement_amount|money }}{% else %}–{% endif %}</td>
+          <td class="num">{% if i.shipmatch_amount is not None %}{{ i.shipmatch_amount|money }}{% else %}–{% endif %}</td>
+          <td class="small">{% if i.data.shipment_id %}<a href="{% url 'review:shipment' i.data.shipment_id %}">{{ i.data.shipment }}</a>. {% endif %}{{ i.data.posted }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</details>
+{% else %}
+<section class="card close-bucket" id="bucket-{{ s.bucket }}">
+  <div class="card-head"><div><h2>{{ s.label }}</h2><p>{{ s.help }}</p></div>
+    <span class="close-bucket-meta">{% if s.open %}<span class="tag warning">{{ s.open }} open</span>{% else %}<span class="tag ok">Resolved</span>{% endif %} <span class="num">{{ s.effect|signed }}</span></span></div>
+  {% for i in s.items %}
+  <div class="issue close-item{% if i.resolved %} resolved{% endif %}" id="item-{{ i.pk }}">
+    <span class="sev tag {% if i.resolved %}ok{% else %}warning{% endif %}">{% if i.resolved %}Resolved{% else %}Open{% endif %}</span>
+    <div>
+      <h4>{% if i.document_id %}<a href="{% url 'review:document' i.document_id %}">{{ i.label }}</a>{% else %}{{ i.label }}{% endif %}</h4>
+      <p>{{ i.explanation }}</p>
+      {% if i.line %}<p class="guide">Statement line {{ i.line.position }}{% if i.line.date %}, {{ i.line.date|date:"j M Y" }}{% endif %}{% if i.line.reference %}, {{ i.line.reference }}{% endif %}.{% if i.data.shipment %} Shipment <a href="{% url 'review:shipment' i.data.shipment_id %}">{{ i.data.shipment }}</a>.{% endif %}</p>
+      {% elif i.data.shipment %}<p class="guide">Shipment <a href="{% url 'review:shipment' i.data.shipment_id %}">{{ i.data.shipment }}</a>. {{ i.data.posted }}</p>{% endif %}
+      {% if i.resolved %}<p class="guide">Resolved by {{ i.resolved_by|display_name }} on {{ i.resolved_at|date:"j M Y" }}: “{{ i.resolution_note }}”</p>{% endif %}
+    </div>
+    <div class="act">
+      <dl class="close-amounts">
+        {% if i.statement_amount is not None %}<div><dt>Statement</dt><dd>{{ i.statement_amount|money }}</dd></div>{% endif %}
+        {% if i.shipmatch_amount is not None %}<div><dt>ShipMatch</dt><dd>{{ i.shipmatch_amount|money }}</dd></div>{% endif %}
+        <div><dt>Effect</dt><dd>{{ i.effect|signed }}</dd></div>
+      </dl>
+      {% if i.mailto %}<a class="btn btn-sm" href="{{ i.mailto }}">{% icon "send" %} Request a copy</a>{% endif %}
+      {% if can_act %}
+        {% if i.resolved %}
+        <form method="post" action="{% url 'close:item_resolve' i.pk %}">{% csrf_token %}<input type="hidden" name="reopen" value="1"><button class="btn btn-sm btn-quiet" type="submit">Reopen</button></form>
+        {% else %}
+        <details class="popover" data-focus>
+          <summary class="btn btn-sm">Mark resolved</summary>
+          <form class="pop-form" method="post" action="{% url 'close:item_resolve' i.pk %}">{% csrf_token %}
+            <label class="lbl" for="note-{{ i.pk }}">How was it resolved?</label>
+            <textarea id="note-{{ i.pk }}" name="note" required maxlength="500" placeholder="For example: vendor sent the copy on 5 Oct; credit applied on their side"></textarea>
+            <p class="hint">Resolving records your note. It doesn't change any invoice, bill or payment.</p>
+            <button class="btn btn-primary btn-sm" type="submit">Mark resolved</button>
+          </form>
+        </details>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+{% empty %}
+<div class="empty card">{% icon "check" %}<h3>Nothing to compare</h3><p class="muted">The statement has no lines ShipMatch could compare.</p></div>
+{% endfor %}
+{% endif %}
+
+<div class="grid-2 close-foot">
+  <details class="card close-lines-read close-collapse">
+    <summary class="card-head"><div><h2>Statement lines as read</h2><p>Check them against the file if something looks off.</p></div><span class="num muted">{{ lines|length }}</span></summary>
+    <div class="table-wrap">
+      <table class="data compact">
+        <thead><tr><th class="num">#</th><th>Date</th><th>Type</th><th>Number</th><th>Reference</th><th class="num">Amount</th><th class="num">Balance</th></tr></thead>
+        <tbody>
+        {% for ln in lines %}
+          <tr><td class="num muted">{{ ln.position }}</td><td class="nowrap">{{ ln.date|date:"j M Y"|default:"–" }}</td><td>{{ ln.get_kind_display }}</td>
+            <td class="nowrap">{{ ln.number|default:"–" }}</td><td class="wrap-cell">{{ ln.reference }}</td>
+            <td class="num">{{ ln.amount|signed }}</td><td class="num">{% if ln.balance is not None %}{{ ln.balance|money }}{% endif %}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <section class="card">
+    <div class="card-head"><div><h2>Payments to {{ st.vendor_name|default:"this vendor" }}</h2><p>Up to the statement date they count against ShipMatch's balance.</p></div></div>
+    {% if payments %}
+    <ul class="plain-list">
+      {% for p in payments %}
+      <li class="close-pay-row"><span><strong>{{ p.amount|money:p.currency }}</strong> on {{ p.paid_on|date:"j M Y" }}
+        <span class="sub">{% if p.reference %}{{ p.reference }}. {% endif %}{% if p.invoice_numbers %}For {{ p.invoice_numbers|join:", " }}. {% endif %}{{ p.get_source_display }}.</span></span>
+        {% if can_act and p.source == "manual" %}<form method="post" action="{% url 'close:payment_delete' p.pk %}">{% csrf_token %}<input type="hidden" name="statement" value="{{ st.pk }}"><button class="btn btn-sm btn-quiet" type="submit" aria-label="Delete payment of {{ p.amount|money:p.currency }} on {{ p.paid_on|date:'j M Y' }}">Delete</button></form>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="card-body small muted">No payments recorded for this vendor.</p>
+    {% endif %}
+    {% if can_act and st.vendor_name %}<div class="doc-foot">{% include "close/_payment_form.html" %}</div>{% endif %}
+  </section>
+</div>
+{% endblock %}

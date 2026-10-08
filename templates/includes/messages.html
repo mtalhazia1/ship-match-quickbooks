@@ -1,0 +1,7 @@
+{% load ui %}{% if messages %}
+<ul class="flash">
+  {% for m in messages %}
+  <li class="{{ m.tags }}" role="{% if m.level_tag == 'error' or m.level_tag == 'warning' %}alert{% else %}status{% endif %}">{% if m.level_tag == 'success' %}{% icon "check" %}{% elif m.level_tag == 'error' %}{% icon "alert-circle" %}{% elif m.level_tag == 'warning' %}{% icon "alert" %}{% else %}{% icon "info" %}{% endif %}<span>{{ m }}</span></li>
+  {% endfor %}
+</ul>
+{% endif %}

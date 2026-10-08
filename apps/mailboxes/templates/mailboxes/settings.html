@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% load ui static humanize %}
+{% block title %}Email intake{% endblock %}
+{% block scripts %}<script src="{% static 'js/mailboxes.js' %}" defer></script>{% endblock %}
+{% block content %}
+{% include "settings/_nav.html" %}
+<div class="grid-side intake">
+  <div class="stack">
+    {% for m in mailboxes %}{% if m.needs_reconnect and m.enabled %}
+    <div class="decision rejected">{% icon "alert-circle" %}
+      <div class="grow"><strong>{{ m.label }} needs to be connected again.</strong> {{ m.last_error|truncatechars:260 }}</div>
+      <div class="decision-actions">
+        {% if m.kind == "microsoft" %}<a class="btn btn-primary" href="{% url 'mailboxes:microsoft_connect' %}?mailbox={{ m.pk }}">Connect again</a>
+        {% elif m.kind == "imap" %}<a class="btn btn-primary" href="{% url 'mailboxes:edit' m.pk %}">Update the password</a>
+        {% else %}<a class="btn" href="{% url 'mailboxes:edit' m.pk %}">Open settings</a>{% endif %}
+      </div>
+    </div>
+    {% endif %}{% endfor %}
+
+    <section class="card" id="forwarding">
+      <div class="card-head">
+        <div><h2>Forwarding address</h2><p>Forward supplier emails here. Every attachment becomes a document, so nobody has to upload anything.</p></div>
+        {% if not domain_configured %}<span class="badge neutral">Not set up</span>{% else %}<span class="badge {{ forwarding.status_badge }}">{{ forwarding.status_label }}</span>{% endif %}
+      </div>
+      <div class="card-body stack">
+        {% if domain_configured %}
+        <div>
+          <div class="secret intake-address"><code id="fwd-address">{{ forwarding.inbound_address }}</code><button class="btn btn-sm" type="button" data-copy="#fwd-address">Copy</button></div>
+          <p class="hint">Only this exact address works, so keep it within your team. If it gets out, create a new one below.</p>
+        </div>
+        {% else %}
+        <ul class="flash"><li class="info">{% icon "info" %}<span>Forwarding addresses aren't set up on this server yet. A platform admin sets <code>INBOUND_EMAIL_DOMAIN</code> and points that domain's mail at Postmark or Mailgun (see the README section “Email intake”). You can connect a mailbox under Connect a mailbox in the meantime.</span></li></ul>
+        {% endif %}
+        <dl class="meta-grid intake-stats">
+          <div><dt>Last email</dt><dd>{% if forwarding.last_received_at %}<span title="{{ forwarding.last_received_at|date:'j M Y, H:i' }}">{{ forwarding.last_received_at|naturaltime }}</span>{% else %}None yet{% endif %}</dd></div>
+          <div><dt>Emails received</dt><dd>{{ forwarding.emails_received|intcomma }}</dd></div>
+          <div><dt>Documents added</dt><dd>{{ forwarding.documents_received|intcomma }}</dd></div>
+          <div><dt>Accepts email from</dt><dd>{% with n=forwarding.sender_rules|length %}{% if n %}{{ n }} allowed sender{{ n|pluralize }}{% else %}Anyone{% endif %}{% endwith %}</dd></div>
+        </dl>
+        {% if domain_configured %}
+        <div class="grid-2 forward-help">
+          <div>
+            <h3>Forward from Outlook or Microsoft 365</h3>
+            <ol class="steps">
+              <li>In Outlook on the web, open Settings, then Mail, then Rules, and add a new rule.</li>
+              <li>As the condition, pick your suppliers' addresses or “Has attachment”.</li>
+              <li>As the action, pick “Redirect to” and paste the address above. Save.</li>
+            </ol>
+            <p class="hint">If Outlook says forwarding outside your company is blocked, ask your Microsoft 365 admin to allow it for this address, or connect the mailbox directly under Connect a mailbox.</p>
+          </div>
+          <div>
+            <h3>Forward from Gmail</h3>
+            <ol class="steps">
+              <li>In Gmail, open Settings, See all settings, Forwarding and POP/IMAP, and add the address above as a forwarding address.</li>
+              <li>Gmail sends a confirmation code to it. The code shows under Recent emails on this page; enter it in Gmail.</li>
+              <li>Create a filter, for example <code>from:harborlink.com has:attachment</code>, and choose “Forward it to” this address.</li>
+            </ol>
+            <p class="hint">You can also forward any single email by hand.</p>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+      <div class="doc-foot intake-foot">
+        <div class="actions">
+          <a class="btn btn-sm" href="{% url 'mailboxes:edit' forwarding.pk %}">Allowed senders</a>
+          <form method="post" action="{% url 'mailboxes:toggle' forwarding.pk %}">{% csrf_token %}
+            <button class="btn btn-sm" type="submit">{% if forwarding.enabled %}Pause{% else %}Turn on{% endif %}</button></form>
+          {% if domain_configured %}
+          <details class="reveal popover" data-menu>
+            <summary class="btn btn-sm">New address</summary>
+            <form class="pop-form" method="post" action="{% url 'mailboxes:regenerate' %}">{% csrf_token %}
+              <p class="small">The current address stops accepting email straight away. Update your forwarding rules and filters with the new one.</p>
+              <button class="btn btn-sm btn-danger solid" type="submit">Create a new address</button>
+            </form>
+          </details>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Connected mailboxes</h2><p>ShipMatch checks these every {{ poll_minutes }} minute{{ poll_minutes|pluralize }} and imports emails that have attachments.</p></div></div>
+      {% if mailboxes %}
+      <div class="table-wrap"><table class="data mailbox-table">
+        <thead><tr><th>Mailbox</th><th>Reads</th><th>Last checked</th><th class="num">Documents</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody>
+        {% for m in mailboxes %}
+        <tr{% if m.last_error and not m.needs_reconnect and m.enabled %} class="has-error"{% endif %}>
+          <td><a class="row-link wrap" href="{% url 'mailboxes:edit' m.pk %}">{{ m.label }}</a><span class="sub">{{ m.get_kind_display }}</span>{% if m.address and m.address != m.label %}<span class="sub">{{ m.address }}</span>{% endif %}</td>
+          <td>{{ m.reads }}<span class="sub">{{ m.afterwards }}</span></td>
+          <td class="nowrap">{% if m.last_checked_at %}<span title="{{ m.last_checked_at|date:'j M Y, H:i' }}">{{ m.last_checked_at|naturaltime }}</span>{% else %}Not yet{% endif %}</td>
+          <td class="num">{{ m.documents_received|intcomma }}<span class="sub">from {{ m.emails_received|intcomma }} email{{ m.emails_received|pluralize }}</span></td>
+          <td><span class="badge {{ m.status_badge }}">{{ m.status_label }}</span></td>
+          <td class="nowrap"><div class="actions mailbox-actions">
+            {% if m.enabled %}<form method="post" action="{% url 'mailboxes:check' m.pk %}">{% csrf_token %}<button class="btn btn-sm" type="submit">{% icon "refresh" %} Check now</button></form>{% endif %}
+            <a class="btn btn-sm btn-quiet" href="{% url 'mailboxes:edit' m.pk %}">Settings</a>
+          </div></td>
+        </tr>
+        {% if m.last_error and not m.needs_reconnect and m.enabled %}
+        <tr class="mailbox-error-row"><td colspan="6"><p class="mailbox-error">{% icon "alert" %}<span>{{ m.last_error|truncatechars:300 }}</span></p></td></tr>
+        {% endif %}
+        {% endfor %}
+        </tbody>
+      </table></div>
+      {% else %}
+      <div class="empty">{% icon "inbox" %}<h3>No mailboxes connected</h3><p class="small">Connect Microsoft 365 or add any other mailbox with IMAP, and ShipMatch picks up attachments on its own.</p></div>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Recent emails</h2><p>Every email that reached ShipMatch, and what happened to each attachment.</p></div></div>
+      {% if recent %}
+      <div class="table-wrap"><table class="data recent-emails">
+        <thead><tr><th>Received</th><th>From and subject</th><th>Came in through</th><th>Result</th></tr></thead>
+        <tbody>
+        {% for r in recent %}
+        <tr>
+          <td class="nowrap"><span title="{{ r.email.received_at|date:'j M Y, H:i' }}">{{ r.email.received_at|date:"j M, H:i" }}</span></td>
+          <td class="email-cell"><strong class="wrap-any">{{ r.email.sender|default:"Unknown sender" }}</strong><span class="sub wrap-any">{{ r.email.subject|default:"(no subject)"|truncatechars:110 }}</span>
+            {% if r.note %}<p class="intake-note">{% icon "info" %}<span>{{ r.note }}</span></p>{% endif %}</td>
+          <td>{{ r.mailbox_name|default:"Removed mailbox" }}{% if r.get_mailbox_kind_display != r.mailbox_name %}<span class="sub">{{ r.get_mailbox_kind_display }}</span>{% endif %}</td>
+          <td><span class="badge {{ r.badge }}">{{ r.result_label }}</span>
+            {% with atts=r.attachments.all %}{% if atts %}
+            <details class="attach-list">
+              <summary>{{ atts|length }} attachment{{ atts|length|pluralize }}</summary>
+              <ul>
+                {% for a in atts %}
+                <li><span class="wrap-any">{% if a.document %}<a href="{% url 'review:document' a.document.pk %}">{{ a.filename }}</a>{% else %}{{ a.filename }}{% endif %}</span>
+                  <span class="sub">{% if a.outcome == "skipped" %}{{ a.reason }}{% else %}{{ a.get_outcome_display }}{% endif %}</span></li>
+                {% endfor %}
+              </ul>
+            </details>
+            {% endif %}{% endwith %}
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      {% else %}
+      <div class="empty">{% icon "send" %}<h3>No emails yet</h3><p class="small">Forward an email with an invoice attached to the address above, or connect a mailbox. It shows here within a few minutes.</p></div>
+      {% endif %}
+    </section>
+  </div>
+
+  <aside class="stack">
+    <section class="card">
+      <div class="card-head"><div><h2>Connect a mailbox</h2><p>For when forwarding isn't possible, or to read a shared AP mailbox directly.</p></div></div>
+      <div class="card-body connect-list">
+        <div class="connect-item">
+          <h3>Outlook and Microsoft 365</h3>
+          <p class="small muted">Sign in with Microsoft. ShipMatch reads one folder and tags imported emails.</p>
+          {% if ms_configured %}<a class="btn btn-primary btn-sm" href="{% url 'mailboxes:microsoft_connect' %}">Connect Microsoft 365</a>
+          {% else %}<p class="hint">Not set up on this server yet: a platform admin adds the Azure app keys (<code>MS_CLIENT_ID</code>, <code>MS_CLIENT_SECRET</code>) to the <code>.env</code> file.</p>{% endif %}
+        </div>
+        <div class="connect-item">
+          <h3>Any other mailbox (IMAP)</h3>
+          <p class="small muted">Google Workspace, Yahoo, iCloud, Zoho, your web host and most others.</p>
+          <a class="btn btn-sm" href="{% url 'mailboxes:imap_new' %}">{% icon "plus" %} Add IMAP mailbox</a>
+        </div>
+        <div class="connect-item">
+          <h3>Gmail label</h3>
+          {% if gmail_mailbox %}
+          <p class="small muted">Reads the label “{{ gmail_mailbox.folder }}”.</p>
+          <span class="badge {{ gmail_mailbox.status_badge }}">{{ gmail_mailbox.status_label }}</span>
+          {% else %}
+          <p class="small muted">Not connected. A platform admin connects Gmail once from the server with
+            <code>python manage.py gmail_auth --org {{ org.slug }}</code>{% if not gmail_credentials_present %} after placing the Google OAuth client file on the server{% endif %}. ShipMatch then reads the label “{{ gmail_label }}”.</p>
+          <p class="hint">Simpler: forward from Gmail to the forwarding address on this page.</p>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    {% if user.is_superuser %}
+    <section class="card">
+      <div class="card-head"><div><h2>Server setup</h2><p>Visible to platform admins only.</p></div></div>
+      <div class="card-body stack">
+        <div>
+          <p class="lbl">Postmark inbound webhook {% if postmark_configured %}<span class="badge ok">Credentials set</span>{% else %}<span class="badge neutral">No credentials</span>{% endif %}</p>
+          <div class="secret"><code id="hook-postmark">{{ webhooks.postmark }}</code><button class="btn btn-sm" type="button" data-copy="#hook-postmark">Copy</button></div>
+          <p class="hint">In Postmark, add the user name and password to the URL: https://user:password@host/…</p>
+        </div>
+        <div>
+          <p class="lbl">Mailgun route URL {% if mailgun_configured %}<span class="badge ok">Signing key set</span>{% else %}<span class="badge neutral">No signing key</span>{% endif %}</p>
+          <div class="secret"><code id="hook-mailgun">{{ webhooks.mailgun }}</code><button class="btn btn-sm" type="button" data-copy="#hook-mailgun">Copy</button></div>
+        </div>
+        <div>
+          <p class="lbl">Microsoft redirect URI</p>
+          <div class="secret"><code id="ms-redirect">{{ ms_redirect_uri }}</code><button class="btn btn-sm" type="button" data-copy="#ms-redirect">Copy</button></div>
+          <p class="hint">Add it under Authentication in the Azure app registration.</p>
+        </div>
+      </div>
+    </section>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

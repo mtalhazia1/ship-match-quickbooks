@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% load ui rates_tags %}
+{% block title %}Charge names{% endblock %}
+{% block content %}
+{% include "rates/_head.html" %}
+
+<div class="grid-side">
+  <div class="stack money-stack">
+    <section class="card">
+      <div class="card-head"><div><h2>Try a charge name</h2><p>See how ShipMatch reads a line from an invoice.</p></div></div>
+      <div class="card-body">
+        <form method="get" class="inline-form">
+          <label class="sr-only" for="test">Charge name</label>
+          <input id="test" type="text" name="test" value="{{ test }}" placeholder="For example: DTHC 40HC or Detention 6 days" style="flex:1;min-width:220px">
+          <button class="btn" type="submit">Check</button>
+        </form>
+        {% if tested %}
+        <div class="tested">
+          <div><span class="muted small">Counts as</span><strong>{{ tested.label }}</strong>
+            {% if tested.kind == "accessorial" %}<span class="tag warning">extra charge</span>{% else %}<span class="tag ok">base charge</span>{% endif %}</div>
+          <div class="small muted">From: {{ tested.source }}{% if tested.units.units is not None and tested.kind == "accessorial" %}. Reads as {{ tested.units.units|floatformat:"-2" }} {{ tested.units.unit }}{{ tested.units.units|pluralize }}{% if tested.units.already_chargeable %}, already chargeable{% endif %}{% endif %}.</div>
+          {% if tested.code == "other" %}<p class="small" style="margin-top:6px">Not recognized{% if not tested.key %}{% else %}, so it is treated as an extra charge and flagged unless approved{% endif %}. Teach ShipMatch what it means below.</p>{% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Names learned for {{ org.name }}</h2><p>Set by a person, or named by the AI once and remembered. These win over the built-in names.</p></div></div>
+      {% if aliases %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Name on invoices</th><th>Counts as</th><th>Set by</th>{% if can_edit %}<th><span class="sr-only">Actions</span></th>{% endif %}</tr></thead>
+          <tbody>
+          {% for a in aliases %}
+          <tr>
+            <td><strong>{{ a.key }}</strong>{% if a.example and a.example|lower != a.key %}<span class="sub">e.g. {{ a.example|truncatechars:50 }}</span>{% endif %}</td>
+            <td>{% if can_edit %}
+              <form method="post" class="inline-form">{% csrf_token %}<input type="hidden" name="example" value="{{ a.example|default:a.key }}">
+                <label class="sr-only" for="alias-{{ a.pk }}">Counts as</label>
+                <select id="alias-{{ a.pk }}" name="code" data-autosubmit>{% for code, name in codes %}<option value="{{ code }}"{% if code == a.code %} selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+                <noscript><button class="btn btn-sm" type="submit">Save</button></noscript></form>
+              {% else %}{{ a.code|charge_label }}{% endif %}</td>
+            <td class="small">{{ a.get_source_display }}{% if a.updated_by %}<span class="sub">{{ a.updated_by|display_name }}, {{ a.updated_at|date:"j M Y" }}</span>{% endif %}</td>
+            {% if can_edit %}<td><form method="post" action="{% url 'rates:charge_name_delete' a.pk %}">{% csrf_token %}<button class="btn btn-sm btn-quiet" type="submit">Forget</button></form></td>{% endif %}
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}<div class="card-body muted small">None yet. The built-in names cover the usual charges; teach a name when a vendor writes one differently.</div>{% endif %}
+    </section>
+
+    {% if can_edit %}
+    <section class="card">
+      <div class="card-head"><h2>Teach a name</h2></div>
+      <div class="card-body">
+        <form method="post" class="form-grid">{% csrf_token %}
+          <div><label class="lbl" for="example">Name as the vendor writes it</label><input class="w-full" id="example" type="text" name="example" maxlength="200" value="{% if tested.code == 'other' %}{{ test }}{% endif %}" required placeholder="For example: Gate-in fee"></div>
+          <div><label class="lbl" for="code">Counts as</label><select class="w-full" id="code" name="code">{% for code, name in codes %}<option value="{{ code }}">{{ name }}</option>{% endfor %}</select></div>
+          <div style="align-self:end"><button class="btn btn-primary" type="submit">Save</button></div>
+        </form>
+        <p class="hint">Amounts and counts are ignored, so “Detention 6 days” and “Detention 2 days” are the same name. Open shipments are checked again after a change.</p>
+      </div>
+    </section>
+    {% endif %}
+  </div>
+
+  <section class="card">
+    <div class="card-head"><div><h2>Charge codes</h2><p>Base charges are compared with the quote. Extra charges must be in the quote or on the approved list.</p></div></div>
+    <div class="table-wrap">
+      <table class="data compact">
+        <tbody>{% for c in all_charges %}<tr><td class="small">{{ c.label }}<span class="sub mono">{{ c.code }}</span></td><td>{% if c.kind == "accessorial" %}<span class="tag warning">extra</span>{% else %}<span class="tag ok">base</span>{% endif %}</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

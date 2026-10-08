@@ -1,0 +1,90 @@
+{% load ui disputes_tags %}{% shipment_disputes shipment as dp %}{% ai_wording_enabled as ai_on %}
+{% if dp.groups or dp.others %}
+<section class="card dispute-panel" id="disputes">
+  <div class="card-head">
+    <div><h2>Disputes with vendors</h2>
+      <p>Ask a vendor for a credit note or a corrected invoice. The email lists each problem with its amount and attaches the invoice.</p></div>
+    <a class="btn btn-sm btn-quiet" href="{% url 'disputes:list' %}">All disputes</a>
+  </div>
+  {% for g in dp.groups %}{% with d=g.open_dispute %}
+  <div class="dp-invoice">
+    <div class="dp-head">
+      <div class="dp-who">
+        <strong>{{ g.vendor_name|default:"Vendor name missing" }}</strong>
+        <span class="sub">{{ g.invoice.get_doc_type_display }} {{ g.invoice_number|default:g.invoice.original_filename }}{% if g.total is not None %}, {{ g.total|money:g.currency }}{% endif %}</span>
+      </div>
+      {% if d %}<a class="badge {{ d.status|dispute_badge }}" href="{% url 'disputes:detail' d.pk %}">{{ d.reference }}: {{ d.get_status_display }}</a>{% endif %}
+    </div>
+
+    {% if d %}
+      <div class="dp-open">
+        <dl class="meta-grid">
+          <div><dt>Disputed</dt><dd>{{ d.amount_disputed|money:d.currency }}</dd></div>
+          {% if d.sent_at %}<div><dt>Sent</dt><dd>{{ d.sent_at|date:"j M Y" }}</dd></div>{% endif %}
+          {% if d.follow_up_on and d.is_waiting %}<div><dt>Follow up</dt><dd>{{ d.follow_up_on|date:"j M Y" }}{% if d.is_overdue %} <span class="tag warning">Overdue</span>{% endif %}</dd></div>{% endif %}
+          {% if d.amount_recovered %}<div><dt>Recovered</dt><dd>{{ d.amount_recovered|money:d.currency }}</dd></div>{% endif %}
+        </dl>
+        {% if d.holds_shipment %}
+          <p class="dp-note">{% icon "lock" %} This shipment can't be approved until the vendor answers. Record the credit on the dispute, or approve without waiting.</p>
+        {% elif d.hold_released and d.is_waiting %}
+          <p class="dp-note muted">Approved without waiting by {{ d.hold_released_by|display_name }}: “{{ d.hold_release_note }}”</p>
+        {% elif d.status == "draft" %}
+          <p class="dp-note muted">Draft not sent yet. It doesn't hold the shipment until it is sent.</p>
+        {% endif %}
+        <div class="actions">
+          <a class="btn btn-sm{% if d.status == 'draft' %} btn-primary{% endif %}" href="{% if d.status == 'draft' and can.edit %}{% url 'disputes:edit' d.pk %}{% else %}{% url 'disputes:detail' d.pk %}{% endif %}">{% if d.status == "draft" and can.edit %}Continue the draft{% else %}Open {{ d.reference }}{% endif %}</a>
+          {% if d.holds_shipment and can.approve and not shipment.is_locked %}
+          <details class="reveal popover" data-focus data-menu>
+            <summary class="btn btn-sm">Approve without waiting</summary>
+            <form class="pop-form" method="post" action="{% url 'disputes:release' d.pk %}">{% csrf_token %}
+              <input type="hidden" name="next" value="{% url 'review:shipment' shipment.pk %}#disputes">
+              <p class="small">The disputed issues are marked resolved so the shipment can be approved. The bill posts as invoiced and {{ d.reference }} stays open to collect the credit.</p>
+              <label class="lbl" for="release-{{ d.pk }}">Why approve now? Kept in the audit log.</label>
+              <textarea id="release-{{ d.pk }}" name="note" minlength="10" maxlength="500" required placeholder="For example: vendor confirmed by phone that a credit note will follow; paying on time to keep the account in good standing."></textarea>
+              <div><button class="btn btn-primary btn-sm" type="submit">Release the hold</button></div>
+            </form>
+          </details>
+          {% endif %}
+        </div>
+      </div>
+    {% elif can.edit %}
+      <form class="dp-form" method="post" action="{% url 'disputes:create' shipment.pk %}">{% csrf_token %}
+        <input type="hidden" name="invoice" value="{{ g.invoice.pk }}">
+        <fieldset class="plain-fieldset">
+          <legend class="sr-only">Problems to raise with {{ g.vendor_name }}</legend>
+          {% for i in g.issues %}
+          <label class="check dp-issue">
+            <input type="checkbox" name="issues" value="{{ i.pk }}"{% if i.amount_at_risk %} checked{% endif %}>
+            <span><strong>{{ i.title }}</strong>{% if i.amount_at_risk %} <span class="dp-amt num">{{ i.amount_at_risk|money:i.currency }}</span>{% endif %}
+              <span class="sub">{{ i.message }}{% if i.resolved %} Already {% if i.severity == "error" %}overridden{% else %}accepted{% endif %} by {{ i.resolved_by|display_name }}.{% endif %}</span></span>
+          </label>
+          {% endfor %}
+        </fieldset>
+        <div class="actions">
+          <button class="btn btn-sm btn-primary" type="submit">{% icon "send" %} Dispute with vendor</button>
+          {% if ai_on %}<label class="check small"><input type="checkbox" name="ai" checked><span>Polish the wording with AI</span></label>{% endif %}
+          <span class="small muted">Opens a draft to check before anything is sent.</span>
+        </div>
+      </form>
+    {% else %}
+      <ul class="dp-list">{% for i in g.issues %}<li>{{ i.title }}{% if i.amount_at_risk %}, {{ i.amount_at_risk|money:i.currency }}{% endif %}</li>{% endfor %}</ul>
+      <p class="small muted">Reviewers and approvers can raise these with the vendor.</p>
+    {% endif %}
+
+    {% for past in g.disputes %}{% if not past.is_open %}
+      <p class="small dp-past"><a href="{% url 'disputes:detail' past.pk %}">{{ past.reference }}</a> {{ past.get_status_display|lower }}{% if past.amount_recovered %}, {{ past.amount_recovered|money:past.currency }} recovered{% endif %}.</p>
+    {% endif %}{% endfor %}
+  </div>
+  {% endwith %}{% endfor %}
+
+  {% for d in dp.others %}
+  <div class="dp-invoice">
+    <div class="dp-head">
+      <div class="dp-who"><strong>{{ d.vendor_name }}</strong><span class="sub">Invoice {{ d.invoice_number|default:"without number" }}, {{ d.amount_disputed|money:d.currency }} disputed</span></div>
+      <a class="badge {{ d.status|dispute_badge }}" href="{% url 'disputes:detail' d.pk %}">{{ d.reference }}: {{ d.get_status_display }}</a>
+    </div>
+    {% if d.holds_shipment %}<p class="dp-note">{% icon "lock" %} Holding this shipment until the vendor answers.</p>{% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Alerts{% endblock %}
+{% block content %}
+{% include "settings/_nav.html" %}
+
+<div class="grid-side">
+  <div class="stack fluid">
+    <section class="card">
+      <div class="card-head">
+        <div><h2>Alert channels</h2><p>Where ShipMatch tells the team that something needs them. Each channel chooses its own alerts.</p></div>
+        <div class="actions">
+          <a class="btn btn-sm btn-primary" href="{% url 'notifications:channel_new' %}?kind=slack">{% icon "plus" %} Slack</a>
+          <a class="btn btn-sm" href="{% url 'notifications:channel_new' %}?kind=teams">{% icon "plus" %} Teams</a>
+          <a class="btn btn-sm" href="{% url 'notifications:channel_new' %}?kind=email">{% icon "plus" %} Email</a>
+        </div>
+      </div>
+      {% if channels %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Channel</th><th>Alerts</th><th>Last message</th><th></th></tr></thead>
+          <tbody>
+          {% for c in channels %}
+          <tr>
+            <td><strong>{{ c.name }}</strong> {% if not c.enabled %}<span class="badge neutral">Off</span>{% endif %}
+              <span class="sub">{{ c.get_kind_display }}: <span class="{% if c.is_webhook %}mono{% endif %}">{{ c.destination|truncatechars:60 }}</span></span></td>
+            <td><div class="tags">{% for label in c.event_labels %}<span class="tag alert-tag">{{ label }}</span>{% endfor %}</div></td>
+            <td class="nowrap">{% with d=c.last_delivery %}{% if d %}
+              <span class="badge {% if d.status == 'sent' %}ok{% elif d.status == 'failed' %}err{% else %}warn{% endif %}">{{ d.get_status_display }}</span>
+              <span class="sub">{{ d.created_at|date:"j M, H:i" }}</span>{% else %}<span class="muted">Never</span>{% endif %}{% endwith %}</td>
+            <td class="nowrap"><div class="actions" style="justify-content:flex-end">
+              <form method="post" action="{% url 'notifications:channel_test' c.pk %}">{% csrf_token %}<button class="btn btn-sm" type="submit">Send test message</button></form>
+              <a class="btn btn-sm btn-quiet" href="{% url 'notifications:channel_edit' c.pk %}">Edit</a>
+              <details class="reveal popover" data-menu><summary class="btn btn-sm btn-quiet" aria-label="Remove {{ c.name }}">{% icon "x" %}</summary>
+                <form class="pop-form" method="post" action="{% url 'notifications:channel_delete' c.pk %}">{% csrf_token %}
+                  <p class="small">{{ c.name }} stops getting alerts. Its delivery history is removed too.</p>
+                  <div><button class="btn btn-sm btn-danger solid" type="submit">Remove channel</button></div>
+                </form></details>
+            </div></td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">{% icon "send" %}<h3>No alert channels yet</h3>
+        <p class="muted">Add a Slack or Teams channel, or an email list, to hear about failed postings, overdue disputes and shipments waiting for approval.</p></div>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Recent messages</h2><p>The last 30 alerts and test messages, with what each service answered.</p></div></div>
+      {% if deliveries %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Time</th><th>Alert</th><th>Channel</th><th>Result</th><th class="num">Tries</th></tr></thead>
+          <tbody>
+          {% for d in deliveries %}
+          <tr>
+            <td class="nowrap">{{ d.created_at|date:"j M, H:i" }}</td>
+            <td>{{ d.title|truncatechars:70 }}<span class="sub">{{ d.event_label }}</span></td>
+            <td>{{ d.channel.name }}</td>
+            <td><span class="badge {% if d.status == 'sent' %}ok{% elif d.status == 'failed' %}err{% else %}warn{% endif %}">{{ d.get_status_display }}{% if d.http_status %}, HTTP {{ d.http_status }}{% endif %}</span>
+              {% if d.error %}<span class="sub">{{ d.error|truncatechars:160 }}</span>{% endif %}
+              {% if d.status == 'retrying' and d.next_attempt_at %}<span class="sub">Next try {{ d.next_attempt_at|date:"H:i" }}</span>{% endif %}</td>
+            <td class="num">{{ d.attempts }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}<div class="card-body muted">No messages sent yet.</div>{% endif %}
+    </section>
+  </div>
+
+  <div class="stack fluid">
+    <section class="card">
+      <div class="card-head"><div><h2>Daily summary</h2><p>For channels that get the daily summary.</p></div></div>
+      <form class="card-body stack" style="gap:10px" method="post">{% csrf_token %}
+        <div><label class="lbl" for="digest_hour">Send at</label>
+          <select id="digest_hour" name="digest_hour">{% for h in hours %}<option value="{{ h }}"{% if h == s.digest_hour %} selected{% endif %}>{% if h < 10 %}0{% endif %}{{ h }}:00</option>{% endfor %}</select>
+          <span class="muted small">{{ org.timezone }}</span>
+          <p class="hint">Counts what needs review or approval, failed postings, overdue disputes and money at risk. Skipped on days with nothing to report.{% if s.last_digest_on %} Last sent {{ s.last_digest_on|date:"j M Y" }}.{% endif %}</p></div>
+        <div><button class="btn btn-sm" type="submit">Save time</button></div>
+      </form>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>What you can be alerted about</h2></div>
+      <div class="card-body small">
+        <dl class="alert-defs">
+          {% for key, label, help in event_list %}<div><dt>{{ label }}</dt><dd>{{ help }}</dd></div>{% endfor %}
+        </dl>
+        <p class="muted" style="margin-top:10px">Links in alerts open ShipMatch at the address set by the server's SITE_URL.</p>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

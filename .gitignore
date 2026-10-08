@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.env
+db.sqlite3
+media/
+secrets/
+datasets/synthetic*/
+eval_reports/
+.pytest_cache/
+staticfiles/
+dump.rdb
+.venv/
+/.venv/
+real_docs/
+.ccr-ca.crt
+.deploy/
+local-test-accounts.txt

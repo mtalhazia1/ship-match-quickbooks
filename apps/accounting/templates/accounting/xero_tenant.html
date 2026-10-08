@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Choose Xero organisation{% endblock %}
+{% block content %}
+{% include "settings/_nav.html" %}
+<section class="card xero-pick">
+  <div class="card-head"><div><h2>Choose the Xero organisation</h2><p>Your Xero sign-in reaches these organisations. Bills from {{ org.name }} will post to the one you choose.</p></div></div>
+  <form method="post" class="card-body">{% csrf_token %}
+    <fieldset class="plain-fieldset xero-tenants">
+      <legend class="sr-only">Xero organisations</legend>
+      {% for t in xero_conn.tenants %}
+      <label class="check xero-tenant"><input type="radio" name="tenant_id" value="{{ t.tenantId }}"{% if t.tenantId == xero_conn.tenant_id or forloop.first and not xero_conn.tenant_id %} checked{% endif %} required>
+        <span><strong>{{ t.tenantName|default:"Unnamed organisation" }}</strong>{% if t.tenantId == xero_conn.tenant_id %}<span class="sub">Used now</span>{% endif %}</span></label>
+      {% endfor %}
+    </fieldset>
+    <p class="hint">Choosing a different organisation clears the Xero contacts and account codes learned for the old one; vendor names stay.</p>
+    <div class="actions"><button class="btn btn-primary" type="submit">Use this organisation</button>
+      <a class="btn btn-quiet" href="{% url 'accounting:settings' org.pk %}">Cancel</a></div>
+  </form>
+</section>
+{% endblock %}

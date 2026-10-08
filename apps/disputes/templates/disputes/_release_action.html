@@ -1,0 +1,13 @@
+{% if dispute.holds_shipment and can.approve and not shipment_locked %}
+<div class="decision-actions">
+  <details class="reveal" data-focus>
+    <summary class="btn">Approve without waiting</summary>
+    <form class="pop-form" method="post" action="{% url 'disputes:release' dispute.pk %}">{% csrf_token %}
+      <p class="small">The disputed issues are marked resolved so {{ dispute.shipment_reference }} can be approved. The bill posts as invoiced; this dispute stays open to collect the credit.</p>
+      <label class="lbl" for="release-note">Why approve now? Kept in the audit log.</label>
+      <textarea id="release-note" name="note" minlength="{{ note_min }}" maxlength="500" required placeholder="For example: vendor confirmed by phone that a credit note will follow."></textarea>
+      <div><button class="btn btn-primary btn-sm" type="submit">Release the hold</button></div>
+    </form>
+  </details>
+</div>
+{% endif %}

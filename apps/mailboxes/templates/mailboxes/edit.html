@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% load ui static humanize %}
+{% block title %}{% if mailbox %}{{ mailbox.label }}{% else %}Add an IMAP mailbox{% endif %}{% endblock %}
+{% block scripts %}<script src="{% static 'js/mailboxes.js' %}" defer></script>{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'core:settings' %}">Settings</a>{% icon "chevron-right" %}<a href="{% url 'mailboxes:index' %}">Email intake</a>{% icon "chevron-right" %}<span>{% if mailbox %}{{ mailbox.label }}{% else %}New IMAP mailbox{% endif %}</span></div>
+    <h1>{% if not mailbox %}Add an IMAP mailbox{% elif kind == "inbound" %}Forwarding address{% else %}{{ mailbox.label }}{% endif %}</h1>
+    <p class="lede">{% if not mailbox %}ShipMatch signs in to the mailbox, reads one folder and imports the attachments of new emails.{% elif kind == "inbound" %}Choose who may send documents to {{ mailbox.inbound_address|default:"the forwarding address" }}.{% else %}{{ mailbox.get_kind_display }}{% if mailbox.address %}, {{ mailbox.address }}{% endif %}{% endif %}</p>
+  </div>
+</div>
+
+{% if mailbox.needs_reconnect %}
+<div class="decision rejected">{% icon "alert-circle" %}
+  <div class="grow"><strong>This mailbox needs to be connected again.</strong> {{ mailbox.last_error }}</div>
+  {% if kind == "microsoft" %}<div class="decision-actions"><a class="btn btn-primary" href="{% url 'mailboxes:microsoft_connect' %}?mailbox={{ mailbox.pk }}">Connect again</a></div>{% endif %}
+</div>
+{% elif mailbox.last_error %}
+<ul class="flash"><li class="warning">{% icon "alert" %}<span>Last check: {{ mailbox.last_error }}</span></li></ul>
+{% endif %}
+
+<div class="grid-side intake">
+  <form method="post" class="card mailbox-form" novalidate>{% csrf_token %}
+    <div class="card-head"><div><h2>{% if kind == "inbound" %}Allowed senders{% else %}Settings{% endif %}</h2>
+      <p>{% if kind == "imap" %}Use the IMAP details from your email provider's help pages.{% elif kind == "microsoft" %}Which folder to read and what to do with emails once imported.{% elif kind == "gmail" %}Gmail is connected from the server; here you choose the label.{% else %}Leave empty to accept email from anyone who knows the address.{% endif %}</p></div></div>
+    <div class="card-body stack">
+      {% if form.non_field_errors %}<ul class="errorlist">{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+
+      {% if kind != "inbound" %}
+      <div><label class="lbl" for="id_display_name">Name</label>
+        <input class="w-full" id="id_display_name" type="text" name="display_name" value="{{ form.display_name.value|default:'' }}" maxlength="120" placeholder="{% if kind == 'imap' %}For example: Accounts payable inbox{% else %}{{ mailbox.address }}{% endif %}">
+        {{ form.display_name.errors }}<p class="hint">Shown on this page and on documents that came from this mailbox.</p></div>
+      {% endif %}
+
+      {% if kind == "imap" %}
+      <div class="form-grid imap-grid">
+        <div><label class="lbl" for="id_host">IMAP server</label>
+          <input class="w-full" id="id_host" type="text" name="host" value="{{ form.host.value|default:'' }}" list="imap-hosts" placeholder="imap.example.com" autocomplete="off" required>
+          <datalist id="imap-hosts">{% for host, name in imap_hosts %}<option value="{{ host }}">{{ name }}</option>{% endfor %}</datalist>
+          {{ form.host.errors }}</div>
+        <div><label class="lbl" for="id_security">Security</label>
+          <select class="w-full" id="id_security" name="security" data-port-target="#id_port">
+            {% for value, label in form.fields.security.choices %}<option value="{{ value }}"{% if form.security.value == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>{{ form.security.errors }}</div>
+        <div><label class="lbl" for="id_port">Port</label>
+          <input id="id_port" type="number" name="port" value="{{ form.port.value|default:'993' }}" min="1" max="65535" size="6" required>{{ form.port.errors }}</div>
+      </div>
+      <div class="form-grid">
+        <div><label class="lbl" for="id_username">User name</label>
+          <input class="w-full" id="id_username" type="text" name="username" value="{{ form.username.value|default:'' }}" autocomplete="off" placeholder="ap@yourcompany.com" required>{{ form.username.errors }}</div>
+        <div><label class="lbl" for="id_password">Password or app password</label>
+          <input class="w-full" id="id_password" type="password" name="password" autocomplete="new-password" {% if mailbox.password %}placeholder="Saved. Leave empty to keep it"{% endif %}>{{ form.password.errors }}</div>
+      </div>
+      <p class="hint">Gmail, Google Workspace, Yahoo and iCloud need an app password (create one in the account's security settings). Microsoft 365 no longer accepts IMAP passwords: use Connect Microsoft 365 instead. The password is stored encrypted.</p>
+      <div class="form-grid">
+        <div><label class="lbl" for="id_folder">Folder</label>
+          <input class="w-full" id="id_folder" type="text" name="folder" value="{{ form.folder.value|default:'INBOX' }}">{{ form.folder.errors }}
+          <p class="hint">INBOX, or a folder your mail rules fill, for example Invoices. Sub-folders: Invoices/Freight.</p></div>
+        <div><span class="lbl">After importing</span>
+          <label class="check"><input type="checkbox" name="mark_seen"{% if form.mark_seen.value %} checked{% endif %}>
+            <span>Mark the email as read<span class="sub">Otherwise ShipMatch leaves emails exactly as they were.</span></span></label></div>
+      </div>
+
+      {% elif kind == "microsoft" %}
+      <div class="form-grid">
+        <div><label class="lbl" for="id_folder">Folder to read</label>
+          <select class="w-full" id="id_folder" name="folder">{% for value, label in form.fields.folder.choices %}<option value="{{ value }}"{% if form.folder.value == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+          {{ form.folder.errors }}<p class="hint">Only emails with attachments are imported. Changing the folder imports its last week of email.</p></div>
+        <div><label class="lbl" for="id_after_import">After importing an email</label>
+          <select class="w-full" id="id_after_import" name="after_import" data-move-toggle="#move-folder">{% for value, label in form.fields.after_import.choices %}<option value="{{ value }}"{% if form.after_import.value == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+          {{ form.after_import.errors }}</div>
+        <div id="move-folder"><label class="lbl" for="id_processed_folder">Move it to</label>
+          <select class="w-full" id="id_processed_folder" name="processed_folder">{% for value, label in form.fields.processed_folder.choices %}<option value="{{ value }}"{% if form.processed_folder.value == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+          {{ form.processed_folder.errors }}</div>
+      </div>
+
+      {% elif kind == "gmail" %}
+      <div><label class="lbl" for="id_folder">Gmail label</label>
+        <input class="w-full" id="id_folder" type="text" name="folder" value="{{ form.folder.value|default:'' }}" required>{{ form.folder.errors }}
+        <p class="hint">Add a Gmail filter that applies this label to supplier emails.</p></div>
+      {% endif %}
+
+      <div><label class="lbl" for="id_allowed_senders">{% if kind == "inbound" %}Accept email only from{% else %}Only import email from{% endif %}</label>
+        <textarea id="id_allowed_senders" name="allowed_senders" rows="4" placeholder="billing@harborlink.com&#10;oceanfreight.example">{{ form.allowed_senders.value|default:'' }}</textarea>
+        {{ form.allowed_senders.errors }}
+        <p class="hint">One address or domain per line; a domain includes its subdomains. Leave empty to accept everyone.{% if kind == "inbound" %} When you forward emails yourself, include your own company's domain.{% endif %}</p></div>
+    </div>
+    <div class="doc-foot"><div class="actions">
+      <button class="btn btn-primary" type="submit">{% if not mailbox %}Save and test{% elif kind == "imap" %}Save{% else %}Save{% endif %}</button>
+      <a class="btn btn-quiet" href="{% url 'mailboxes:index' %}">Cancel</a>
+    </div></div>
+  </form>
+
+  {% if mailbox and kind != "inbound" %}
+  <aside class="stack">
+    <section class="card">
+      <div class="card-head"><h2>Status</h2><span class="badge {{ mailbox.status_badge }}">{{ mailbox.status_label }}</span></div>
+      <div class="card-body">
+        <dl class="status-list">
+          <div><dt>Last checked</dt><dd>{% if mailbox.last_checked_at %}{{ mailbox.last_checked_at|date:"j M Y, H:i" }}{% else %}Not yet{% endif %}</dd></div>
+          <div><dt>Last worked</dt><dd>{% if mailbox.last_success_at %}{{ mailbox.last_success_at|date:"j M Y, H:i" }}{% else %}Not yet{% endif %}</dd></div>
+          <div><dt>Emails imported</dt><dd>{{ mailbox.emails_received|intcomma }}</dd></div>
+          <div><dt>Documents added</dt><dd>{{ mailbox.documents_received|intcomma }}</dd></div>
+          <div><dt>Attachments skipped</dt><dd>{{ mailbox.attachments_skipped|intcomma }}</dd></div>
+        </dl>
+      </div>
+      <div class="doc-foot"><div class="actions">
+        {% if mailbox.enabled %}<form method="post" action="{% url 'mailboxes:check' mailbox.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}"><button class="btn btn-sm" type="submit">{% icon "refresh" %} Check now</button></form>{% endif %}
+        <form method="post" action="{% url 'mailboxes:test' mailbox.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}"><button class="btn btn-sm" type="submit">Test connection</button></form>
+        {% if kind == "microsoft" %}<form method="post" action="{% url 'mailboxes:folders' mailbox.pk %}">{% csrf_token %}<button class="btn btn-sm btn-quiet" type="submit">Reload folders</button></form>{% endif %}
+      </div></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Pause or remove</h2></div>
+      <div class="card-body">
+        <p class="small muted">Pausing stops the checks but keeps the settings{% if kind == "microsoft" %} and sign-in{% endif %}. Removing deletes the {% if kind == "imap" %}saved password{% else %}sign-in{% endif %}; emails and documents already imported stay.</p>
+        <div class="actions">
+          <form method="post" action="{% url 'mailboxes:toggle' mailbox.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}">
+            <button class="btn btn-sm" type="submit">{% if mailbox.enabled %}Pause{% else %}Turn on{% endif %}</button></form>
+          {% if kind == "microsoft" %}<a class="btn btn-sm" href="{% url 'mailboxes:microsoft_connect' %}?mailbox={{ mailbox.pk }}">Connect again</a>{% endif %}
+          <details class="reveal popover" data-menu>
+            <summary class="btn btn-sm btn-danger">Remove</summary>
+            <form class="pop-form" method="post" action="{% url 'mailboxes:remove' mailbox.pk %}">{% csrf_token %}
+              <p class="small">ShipMatch stops reading {{ mailbox.label }}{% if kind == "gmail" %} and deletes the Gmail sign-in from the server{% endif %}. Nothing changes in the mailbox itself.</p>
+              <button class="btn btn-sm btn-danger solid" type="submit">Remove mailbox</button>
+            </form>
+          </details>
+        </div>
+      </div>
+    </section>
+  </aside>
+  {% elif not mailbox %}
+  <aside class="stack">
+    <section class="card">
+      <div class="card-head"><h2>Common settings</h2></div>
+      <div class="card-body">
+        <table class="fields imap-presets">
+          <tr><td class="k">Gmail, Google Workspace</td><td><code>imap.gmail.com</code>, 993</td></tr>
+          <tr><td class="k">Yahoo Mail</td><td><code>imap.mail.yahoo.com</code>, 993</td></tr>
+          <tr><td class="k">iCloud Mail</td><td><code>imap.mail.me.com</code>, 993</td></tr>
+          <tr><td class="k">Zoho Mail</td><td><code>imap.zoho.com</code>, 993</td></tr>
+          <tr><td class="k">Fastmail</td><td><code>imap.fastmail.com</code>, 993</td></tr>
+        </table>
+        <p class="hint">All use SSL/TLS. For Outlook and Microsoft 365, go back and use Connect Microsoft 365.</p>
+      </div>
+    </section>
+  </aside>
+  {% endif %}
+</div>
+{% endblock %}

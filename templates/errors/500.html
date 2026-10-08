@@ -1,0 +1,20 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Something went wrong – ShipMatch</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+<main class="content">
+  <div class="error-page">
+    <div class="code">Error 500</div>
+    <h1>Something went wrong on our side</h1>
+    <p>The error was logged. Try again in a moment.</p>
+    {% if request_id %}<p class="muted">If it keeps happening, send this reference to your administrator: <code>{{ request_id }}</code></p>{% endif %}
+    <a class="btn btn-primary" href="/">Back to ShipMatch</a>
+  </div>
+</main>
+</body>
+</html>

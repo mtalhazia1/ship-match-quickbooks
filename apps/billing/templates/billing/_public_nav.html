@@ -1,0 +1,1 @@
+{% load billing_tags %}{% signup_open as open %}{% if open and request.resolver_match.namespace != 'signup' %}<a href="{% url 'signup:start' %}">Start a free trial</a>{% endif %}

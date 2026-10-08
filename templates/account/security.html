@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Security and sign-in{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Security and sign-in</h1>
+    <p class="lede">Protect your account with two-factor authentication and choose how times are shown.</p>
+  </div>
+</div>
+
+<div class="grid-side">
+  <div class="stack">
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Two-factor authentication</h2>
+          <p>A 6-digit code from an authenticator app is needed at each sign-in, as well as your password.</p>
+        </div>
+        {% if profile.mfa_enabled %}<span class="badge ok">On since {{ profile.mfa_enabled_at|date:"j M Y" }}</span>
+        {% else %}<span class="badge warn">Off</span>{% endif %}
+      </div>
+      <div class="card-body">
+        {% if recovery_codes %}
+          <h3>Save your recovery codes</h3>
+          <p class="muted">Each code works once if you lose your phone. Store them in a password manager. They won't be shown again.</p>
+          <div class="codes" id="recovery-codes">{% for c in recovery_codes %}<span>{{ c }}</span> {% endfor %}</div>
+          <p style="margin-top:10px"><button class="btn btn-sm" type="button" data-copy="#recovery-codes">Copy codes</button></p>
+          <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
+        {% endif %}
+
+        {% if profile.mfa_enabled %}
+          <p>You'll be asked for a code each time you sign in. {{ profile.recovery_codes|length }} recovery code{{ profile.recovery_codes|length|pluralize }} left.</p>
+          <div class="actions">
+            <details class="reveal" data-focus>
+              <summary class="btn">Create new recovery codes</summary>
+              <form class="pop-form" method="post" action="{% url 'accounts:mfa_recovery_codes' %}">{% csrf_token %}
+                <label class="lbl" for="rc-pw">Confirm with your password</label>
+                <input id="rc-pw" type="password" name="password" autocomplete="current-password" required>
+                <button class="btn btn-primary" type="submit">Create codes</button>
+              </form>
+            </details>
+            {% if not required_by %}
+            <details class="reveal" data-focus>
+              <summary class="btn btn-danger">Turn off</summary>
+              <form class="pop-form" method="post" action="{% url 'accounts:mfa_disable' %}">{% csrf_token %}
+                <label class="lbl" for="off-pw">Confirm with your password</label>
+                <input id="off-pw" type="password" name="password" autocomplete="current-password" required>
+                <button class="btn btn-danger solid" type="submit">Turn off two-factor</button>
+              </form>
+            </details>
+            {% else %}
+            <p class="small muted">Required by {% for o in required_by %}{{ o.name }}{% if not forloop.last %}, {% endif %}{% endfor %}, so it can't be turned off.</p>
+            {% endif %}
+          </div>
+        {% elif pending_qr %}
+          <ol style="padding-left:18px;margin:0 0 14px">
+            <li>Open an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, Authy).</li>
+            <li>Scan this code, or type the setup key.</li>
+            <li>Enter the 6-digit code the app shows.</li>
+          </ol>
+          <div class="actions" style="align-items:flex-start;gap:20px">
+            <img class="qr" src="{{ pending_qr }}" alt="QR code for your authenticator app">
+            <div style="flex:1;min-width:220px">
+              <p class="lbl">Setup key</p>
+              <div class="secret"><code id="setup-key">{{ pending_secret }}</code><button class="btn btn-sm" type="button" data-copy="#setup-key">Copy</button></div>
+              <form method="post" action="{% url 'accounts:mfa_confirm' %}" style="margin-top:16px">{% csrf_token %}
+                <label class="lbl" for="confirm-code">Code from the app</label>
+                <div class="inline-form">
+                  <input id="confirm-code" class="code-input" type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required style="width:170px">
+                  <button class="btn btn-primary" type="submit">Turn on</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        {% else %}
+          {% if required_by %}<p><strong>{% for o in required_by %}{{ o.name }}{% if not forloop.last %}, {% endif %}{% endfor %} requires two-factor authentication.</strong> Set it up to continue.</p>{% endif %}
+          <form method="post" action="{% url 'accounts:mfa_start' %}">{% csrf_token %}
+            <button class="btn btn-primary" type="submit">{% icon "lock" %} Set up two-factor</button>
+          </form>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Password</h2><p>Use at least 12 characters. Changing it keeps you signed in here.</p></div></div>
+      <div class="card-body"><a class="btn" href="{% url 'accounts:password_change' %}">{% icon "key" %} Change password</a></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="card-head"><div><h2>Time zone</h2><p>Dates and times across ShipMatch use this zone.</p></div></div>
+    <div class="card-body">
+      <form method="post" action="{% url 'accounts:preferences' %}">{% csrf_token %}
+        <label class="lbl" for="tz">Time zone</label>
+        <select id="tz" name="timezone" class="w-full">
+          <option value="">Automatic (from this browser)</option>
+          {% for z in zones %}<option value="{{ z }}"{% if z == profile.timezone %} selected{% endif %}>{{ z }}</option>{% endfor %}
+        </select>
+        <p class="hint">Now showing {{ timezone_name }}.</p>
+        <button class="btn" type="submit" style="margin-top:6px">Save</button>
+      </form>
+    </div>
+  </section>
+</div>
+{% endblock %}

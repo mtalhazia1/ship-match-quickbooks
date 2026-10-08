@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}{% if action == "approve" %}Approve shipments{% else %}Post shipments{% endif %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{{ next }}">Review queue</a>{% icon "chevron-right" %}<span>Confirm</span></div>
+    <h1>{% if action == "approve" %}Approve {{ previews|length }} shipment{{ previews|length|pluralize }}?{% else %}Post {{ previews|length }} shipment{{ previews|length|pluralize }} to accounting?{% endif %}</h1>
+    <p class="lede">Each shipment is checked on its own, exactly as when you {% if action == "approve" %}approve it from its page: your role, your approval limit, maker-checker, open errors, disputes waiting for the vendor and two-factor{% else %}post it from its page: your role, approval, shared invoices and the accounting connection{% endif %}. Nothing has changed yet.</p>
+  </div>
+</div>
+
+{% if missing %}<ul class="flash"><li class="info">{% icon "info" %}<span>{{ missing }} of the selected shipments {{ missing|pluralize:"is,are" }} no longer in {{ org.name }} and {{ missing|pluralize:"was,were" }} left out.</span></li></ul>{% endif %}
+
+<div class="wf-summary">
+  <span class="badge ok">{{ ready }} will be {% if action == "approve" %}approved{% else %}posted{% endif %}</span>
+  {% if skipped %}<span class="badge warn">{{ skipped }} will be skipped</span>{% endif %}
+</div>
+
+<section class="card">
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Shipment</th><th>Status</th><th class="num">Payable total</th><th>What will happen</th></tr></thead>
+      <tbody>
+      {% for p in previews %}
+        <tr>
+          <td><a class="row-link" href="{% url 'review:shipment' p.shipment.pk %}">{{ p.shipment.reference }}</a></td>
+          <td>{% include "includes/status.html" with s=p.shipment %}</td>
+          <td class="num nowrap">{% for cur, amount in p.totals.by_currency.items %}<div>{{ amount|money:cur }}</div>{% empty %}–{% endfor %}</td>
+          <td>{% if p.ok %}<span class="tag ok">{% icon "check" %} {% if action == "approve" %}Will be approved{% else %}Will be posted{% endif %}</span>
+            {% else %}<span class="tag warning">{% icon "alert" %} Will be skipped</span>
+              <ul class="wf-reasons">{% for r in p.reasons %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<form class="card wf-confirm" method="post" action="{% url 'workflow:bulk' %}">{% csrf_token %}
+  <input type="hidden" name="action" value="{{ action }}">
+  <input type="hidden" name="confirm" value="1">
+  <input type="hidden" name="next" value="{{ next }}">
+  {% for p in previews %}<input type="hidden" name="ids" value="{{ p.shipment.pk }}">{% endfor %}
+  <div class="card-body">
+    {% if action == "approve" and ready %}
+    <label class="lbl" for="wf-bulk-note">Note for the audit log (optional)</label>
+    <input id="wf-bulk-note" class="w-full" type="text" name="note" maxlength="500" placeholder="For example: weekly approval run, checked against the vendor statements">
+    {% endif %}
+    {% if not ready %}<p class="muted">None of these can be {% if action == "approve" %}approved{% else %}posted{% endif %} by you right now. The reasons are listed above.</p>{% endif %}
+  </div>
+  <div class="compose-foot">
+    {% if ready %}<button class="btn btn-primary" type="submit" data-wf-autofocus>{% if action == "approve" %}{% icon "check" %} Approve {{ ready }} shipment{{ ready|pluralize }}{% else %}{% icon "send" %} Post {{ ready }} shipment{{ ready|pluralize }}{% endif %}</button>{% endif %}
+    <a class="btn btn-quiet" href="{{ next }}">Cancel</a>
+    {% if ready and skipped %}<span class="small muted">The {{ skipped }} that can't go ahead are recorded in the audit log with the reasons.</span>{% endif %}
+  </div>
+</form>
+{% endblock %}

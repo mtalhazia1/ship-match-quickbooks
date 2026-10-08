@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% load ui rates_tags %}
+{% block title %}{{ quote.title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'rates:list' %}">Rates</a>{% icon "chevron-right" %}<span>{{ quote.title }}</span></div>
+    <div class="actions" style="gap:12px"><h1>{{ quote.vendor_name }}</h1>{% include "rates/_status.html" with state=state %}</div>
+    <dl class="meta-grid">
+      <div><dt>Quote reference</dt><dd>{{ quote.reference|default:"None" }}</dd></div>
+      <div><dt>Lane</dt><dd>{{ quote.lane }}</dd></div>
+      <div><dt>Equipment</dt><dd>{{ quote.equipment|default:"Any" }}</dd></div>
+      <div><dt>Valid</dt><dd>{{ quote.valid_from|date:"j M Y" }} {% if quote.valid_to %}to {{ quote.valid_to|date:"j M Y" }}{% else %}with no end date{% endif %}</dd></div>
+      <div><dt>Currency</dt><dd>{{ quote.currency }}</dd></div>
+      {% if quote.all_in %}<div><dt>Rate type</dt><dd>All-in</dd></div>{% endif %}
+    </dl>
+  </div>
+  {% if can_edit %}
+  <div class="actions">
+    <a class="btn" href="{% url 'rates:edit' quote.pk %}">Edit</a>
+    <a class="btn" href="{% url 'rates:create' %}?copy={{ quote.pk }}" title="Start a new quote with these charges">{% icon "plus" %} Copy for a new period</a>
+    <form method="post" action="{% url 'rates:archive' quote.pk %}">{% csrf_token %}
+      <button class="btn" type="submit">{% if quote.archived %}Restore{% else %}Archive{% endif %}</button></form>
+    <details class="reveal popover" data-menu><summary class="btn btn-danger">Delete</summary>
+      <form class="pop-form" method="post" action="{% url 'rates:delete' quote.pk %}">{% csrf_token %}
+        <p class="small">Invoices from {{ quote.vendor_name }} will no longer be checked against this quote. Archiving keeps it for reference instead; the audit log keeps a copy either way.</p>
+        <label class="check small"><input type="checkbox" name="confirm" value="delete" required><span>Delete {{ quote.title }} permanently</span></label>
+        <button class="btn btn-sm btn-danger solid" type="submit">Delete quote</button>
+      </form></details>
+  </div>
+  {% endif %}
+</div>
+
+{% if quote.archived %}<div class="decision blocked">{% icon "info" %}<div class="grow"><strong>Archived.</strong> Invoices are not checked against this quote. Restore it to use it again.</div></div>{% endif %}
+
+<div class="grid-side">
+  <div class="stack money-stack">
+    <section class="card">
+      <div class="card-head"><div><h2>Charges</h2><p>What {{ quote.vendor_name }} may charge on this lane, in {{ quote.currency }}.</p></div></div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Charge</th><th>As the vendor writes it</th><th>Basis</th><th class="num">Amount</th></tr></thead>
+          <tbody>
+          {% for c in quote.charges.all %}
+            <tr><td>{{ c.code_label }}<span class="sub mono">{{ c.code }}</span></td><td class="muted">{{ c.description|default:"–" }}</td>
+              <td>{{ c.get_basis_display }}</td><td class="num">{{ c.amount|money:quote.currency }}</td></tr>
+          {% empty %}<tr><td colspan="4" class="muted">No charge lines. Edit the quote to add them.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if quote.notes %}<div class="card-body" style="border-top:1px solid var(--line)"><p class="small muted" style="white-space:pre-line">{{ quote.notes }}</p></div>{% endif %}
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Invoices checked against this quote</h2><p>Latest issues raised with this quote, newest first.</p></div></div>
+      {% if checks %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Shipment</th><th>Issue</th><th class="num">Amount</th><th>Status</th></tr></thead>
+          <tbody>
+          {% for i in checks %}
+          <tr>
+            <td>{% if i.shipment %}<a class="row-link" href="{% url 'review:shipment' i.shipment_id %}#issues">{{ i.shipment.reference }}</a>{% else %}–{% endif %}
+              <span class="sub">{{ i.document.original_filename|default:""|truncatechars:34 }}</span></td>
+            <td>{{ i.title }}<span class="sub">{{ i.data.charge_code|charge_label }}</span></td>
+            <td class="num nowrap">{{ i.amount_at_risk|money:i.currency }}</td>
+            <td>{% if i.resolved %}<span class="badge neutral">Accepted</span>{% elif i.shipment.status == "rejected" %}<span class="badge ok">Rejected</span>{% else %}<span class="badge {% if i.severity == 'error' %}err{% else %}warn{% endif %}">Open</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}<div class="card-body muted small">No invoice has gone over this quote yet.</div>{% endif %}
+    </section>
+  </div>
+
+  <div class="stack money-stack">
+    <section class="card">
+      <div class="card-head"><h2>How invoices are matched</h2></div>
+      <div class="card-body small">
+        <dl class="kv">
+          <dt>Origin</dt><dd>{% if not quote.origin %}Any port{% elif origin_port %}{{ origin_port.label }}{% else %}“{{ quote.origin }}”, matched by name{% endif %}</dd>
+          <dt>Destination</dt><dd>{% if not quote.destination %}Any port{% elif destination_port %}{{ destination_port.label }}{% else %}“{{ quote.destination }}”, matched by name{% endif %}</dd>
+          <dt>Equipment</dt><dd>{{ quote.equipment|default:"Any" }}</dd>
+        </dl>
+        <p class="hint">The lane comes from the bill of lading in the same shipment. Ports in the same area count as a match (for example Los Angeles and Long Beach).</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Approved extra charges</h2><p>For {{ quote.vendor_name }}, on any lane.</p></div>
+        {% if can_edit %}<a class="btn btn-sm" href="{% url 'rates:extra_create' %}?vendor={{ quote.vendor_name|urlencode }}">{% icon "plus" %} Add</a>{% endif %}</div>
+      {% if extras %}
+      <ul class="plain-list">
+        {% for a in extras %}<li><strong>{{ a.code_label }}</strong><span class="sub">{{ a.terms|capfirst }}</span></li>{% endfor %}
+      </ul>
+      {% else %}<div class="card-body muted small">None. Any detention, demurrage, exam fee or other extra on this vendor's invoices is flagged unless the quote lists it.</div>{% endif %}
+    </section>
+
+    {% if others %}
+    <section class="card">
+      <div class="card-head"><div><h2>Other quotes from this vendor</h2><p>Same lane first</p></div></div>
+      <ul class="plain-list">
+        {% for o in others %}<li><a href="{% url 'rates:detail' o.pk %}">{{ o.title }}</a>{% if o.pk in same_lane %} <span class="tag ok">same lane</span>{% endif %}
+          <span class="sub">{{ o.lane }}, {{ o.equipment|default:"any equipment" }}, {{ o.valid_from|date:"j M Y" }}{% if o.valid_to %} to {{ o.valid_to|date:"j M Y" }}{% endif %}{% if o.archived %}, archived{% endif %}</span></li>{% endfor %}
+      </ul>
+      {% if sibling_count > others|length %}<div class="card-body small" style="border-top:1px solid var(--line)"><a href="{% url 'rates:list' %}?vendor={{ quote.vendor_key|urlencode }}&amp;status=all">All {{ sibling_count|add:1 }} quotes from {{ quote.vendor_name }}</a></div>{% endif %}
+    </section>
+    {% endif %}
+
+    <section class="card">
+      <div class="card-head"><h2>History</h2></div>
+      {% if events %}
+      <ol class="timeline">
+        {% for e in events %}<li><div>{{ e.who|display_name }} {{ e.text }}</div>{% if e.source %}<div class="small muted">From {{ e.source }}</div>{% endif %}<div class="when">{{ e.at|date:"j M Y, H:i" }}</div></li>{% endfor %}
+      </ol>
+      {% else %}<div class="card-body muted small">Added before history was kept.</div>{% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

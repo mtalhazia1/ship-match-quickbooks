@@ -1,0 +1,19 @@
+{% load ui %}{# Settings > Accounting: problems with the active connection. #}
+{% if active and active.needs_reconnect %}
+<div class="decision rejected">{% icon "alert-circle" %}
+  <div class="grow"><strong>{{ active.system_name }} needs to be connected again.</strong>
+    {% if active.system == "xero" %}Xero{% else %}Intuit{% endif %} no longer accepts this connection (it expired or was revoked), so bills can't be posted and payments aren't checked. Connecting again keeps your settings and vendor rules.</div>
+  <div class="decision-actions"><a class="btn btn-primary" href="{% if active.system == 'xero' %}{% url 'accounting:xero_connect' org.pk %}{% else %}{% url 'accounting:connect' org.pk %}{% endif %}">Connect again</a></div>
+</div>
+{% elif active and active.reconnect_due_soon %}
+<div class="decision blocked">{% icon "alert" %}
+  <div class="grow"><strong>The {{ active.system_name }} connection expires on {{ active.refresh_expires_at|date:"j M Y" }}.</strong>
+    {% if active.system == "xero" %}It stays alive while ShipMatch uses it (payment checks do, every hour). Connect again if checks are switched off.{% else %}Connect again before then to keep posting without interruption.{% endif %}</div>
+  <div class="decision-actions"><a class="btn" href="{% if active.system == 'xero' %}{% url 'accounting:xero_connect' org.pk %}{% else %}{% url 'accounting:connect' org.pk %}{% endif %}">Connect again</a></div>
+</div>
+{% elif xero_conn and not xero_conn.tenant_id %}
+<div class="decision blocked">{% icon "alert" %}
+  <div class="grow"><strong>Choose the Xero organisation.</strong> Your Xero sign-in reaches several organisations. Nothing posts to Xero until you choose one.</div>
+  <div class="decision-actions"><a class="btn btn-primary" href="{% url 'accounting:xero_tenant' org.pk %}">Choose organisation</a></div>
+</div>
+{% endif %}

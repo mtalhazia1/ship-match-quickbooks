@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Join {{ org.name }}{% endblock %}
+{% block content %}
+<div class="error-page">
+  <div class="code">Invitation</div>
+  <h1>Join {{ org.name }}?</h1>
+  <p>{{ inviter }} invited you to join <strong>{{ org.name }}</strong> as <strong>{{ role_label|lower }}</strong>{% if limit is not None %}, with an approval limit of {{ org.home_currency }} {{ limit|floatformat:2 }}{% endif %}.</p>
+  <p class="muted">You're signed in as {{ user.email|default:user.get_username }}. Accepting adds {{ org.name }} to your account; you keep your current password and your access to your other organizations.</p>
+  <form method="post" style="display:inline">{% csrf_token %}
+    <button class="btn btn-primary" type="submit">Accept and join {{ org.name|truncatechars:30 }}</button>
+  </form>
+  <a class="btn" href="{% url 'core:dashboard' %}">Not now</a>
+</div>
+{% endblock %}

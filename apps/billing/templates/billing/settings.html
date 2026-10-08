@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% load ui humanize %}
+{% block title %}Billing{% endblock %}
+{% block content %}
+{% include "settings/_nav.html" %}
+
+{% if not enabled %}
+<section class="card" style="max-width:860px">
+  <div class="card-body">
+    <h2>Billing is switched off on this server</h2>
+    <p class="muted" style="margin-top:6px">There are no plans or limits here. The person who runs ShipMatch can switch billing on with <code>BILLING_ENABLED=1</code> and Stripe keys (see the README, section Billing).</p>
+    <p class="small muted">Documents received this month: <strong class="num">{{ usage.used|intcomma }}</strong>.</p>
+  </div>
+</section>
+{% else %}
+
+<div class="grid-side pf-billing">
+  <div class="stack fluid">
+    <section class="card">
+      <div class="card-head">
+        <div><h2>Your plan</h2>
+          <p>{% if account and account.is_billed %}Billed monthly through Stripe in {{ currency }}.{% else %}{{ org.name }} is billed by agreement with us. Choose a plan below to pay by card instead.{% endif %}</p></div>
+        {% if account.stripe_customer_id %}
+        <form method="post" action="{% url 'billing:portal' %}">{% csrf_token %}
+          <button class="btn" type="submit">{% icon "external" %} Payment method and invoices</button>
+        </form>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        {% if account and account.is_billed %}
+        <dl class="meta-grid pf-plan-facts">
+          <div><dt>Plan</dt><dd>{{ current_plan.name|default:"None" }}{% if limits.trial %} (trial){% endif %}</dd></div>
+          <div><dt>Status</dt><dd>
+            <span class="badge {% if account.trial_over or account.status == 'canceled' %}err{% elif account.status == 'past_due' %}warn{% elif account.status == 'trialing' %}info{% else %}ok{% endif %}">{{ account.status_label }}</span></dd></div>
+          {% if account.status == 'trialing' and account.trial_ends_at %}
+          <div><dt>{% if account.trial_over %}Trial ended{% else %}Trial ends{% endif %}</dt><dd>{{ account.trial_ends_at|date:"j M Y" }}{% if account.trial_days_left and not account.trial_over %} <span class="muted">({{ account.trial_days_left }} day{{ account.trial_days_left|pluralize }} left)</span>{% endif %}</dd></div>
+          {% endif %}
+          {% if account.has_subscription and account.current_period_end %}
+          <div><dt>{% if account.cancel_at_period_end %}Ends on{% else %}Renews on{% endif %}</dt><dd>{{ account.current_period_end|date:"j M Y" }}</dd></div>
+          {% endif %}
+          <div><dt>Users</dt><dd>{% if limits.users %}Up to {{ limits.users }}{% else %}No limit{% endif %}</dd></div>
+        </dl>
+        {% if account.trial_over %}<p class="pf-note pf-note-error">{% icon "alert-circle" %}<span>The free trial has ended, so new uploads and emails are paused. Choose a plan to start them again. Documents already received can still be reviewed, approved and posted.</span></p>
+        {% elif account.status == 'canceled' %}<p class="pf-note pf-note-error">{% icon "alert-circle" %}<span>The subscription is canceled, so new uploads and emails are paused. Choose a plan to start them again.</span></p>
+        {% elif account.status == 'past_due' %}<p class="pf-note pf-note-warning">{% icon "alert" %}<span>The last payment didn't go through. Stripe tries again over the next days. Update the card under Payment method and invoices.</span></p>
+        {% elif limits.trial %}<p class="pf-note">{% icon "info" %}<span>During the trial you can receive {{ trial_documents|intcomma }} documents. Choosing a plan now doesn't end the trial early: the first payment is taken when it ends.</span></p>{% endif %}
+        {% else %}
+        <p class="muted">No plan limits apply to {{ org.name }}.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>{% if usage.trial %}Documents during the trial{% else %}Documents this billing month{% endif %}</h2>
+        <p>{{ usage.period_start|date:"j M" }} to {{ usage.period_end|date:"j M Y" }}. A ZIP counts each file inside; a file received twice counts once.</p></div></div>
+      <div class="card-body">
+        <div class="pf-usage-head">
+          <span class="pf-usage-num num">{{ usage.used|intcomma }}</span>
+          <span class="muted">{% if usage.allowance %}of {{ usage.allowance|intcomma }} included ({{ usage.percent }}%){% else %}received, no limit{% endif %}</span>
+        </div>
+        {% if usage.allowance %}
+        <div class="pf-meter{% if usage.hard_reached %} is-stopped{% elif usage.soft_reached %} is-over{% endif %}" role="img"
+             aria-label="{{ usage.used }} of {{ usage.allowance }} documents used; new documents stop at {{ usage.hard_limit }}">
+          <span class="pf-meter-fill" style="width:{{ usage.bar_percent }}%"></span>
+          <span class="pf-meter-mark" style="left:{{ usage.allowance_mark }}%"></span>
+        </div>
+        <div class="pf-meter-axis small muted{% if usage.allowance_mark >= 60 %} is-late{% endif %}"><span>0</span><span style="left:{{ usage.allowance_mark }}%">{{ usage.allowance|intcomma }} included</span><span>{{ usage.hard_limit|intcomma }} stop</span></div>
+        <ul class="pf-rules small">
+          <li>At {{ usage.allowance|intcomma }} documents everyone sees a notice and admins get one email. Nothing stops.</li>
+          {% if usage.trial %}<li>At {{ usage.hard_limit|intcomma }} new uploads, emails and API uploads are paused until you choose a plan.</li>
+          {% else %}<li>At {{ usage.hard_limit|intcomma }} ({{ hard_percent }}%) new uploads, emails and API uploads are paused until {{ usage.period_end|date:"j M" }} or until you choose a bigger plan.</li>{% endif %}
+          <li>Reviewing, correcting, approving and posting what's already in is never paused.</li>
+        </ul>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Plans</h2><p>Monthly, in {{ currency }}. Change or cancel any time in Payment method and invoices.</p></div></div>
+      <div class="pf-plans">
+        {% for p in plans %}
+        <div class="pf-plan{% if current_plan and current_plan.key == p.key and account.is_billed %} is-current{% endif %}">
+          <h3>{{ p.name }}</h3>
+          <div class="pf-price">{% if p.price %}<span class="cur">{{ currency }}</span> {{ p.price }}<span class="per"> a month</span>{% else %}<span class="per">Price on request</span>{% endif %}</div>
+          <ul class="pf-plan-list">
+            <li>{{ p.documents|intcomma }} documents a month</li>
+            <li>{{ p.users_label }}</li>
+            {% for f in p.feature_labels %}<li>{{ f }}</li>{% endfor %}
+          </ul>
+          {% if current_plan and current_plan.key == p.key and account.has_subscription and account.status != 'canceled' %}
+            <span class="badge ok">Current plan</span>
+          {% elif not stripe_ready or not p.can_checkout %}
+            <button class="btn" type="button" disabled>Not available yet</button>
+          {% else %}
+            <form method="post" action="{% url 'billing:checkout' %}">{% csrf_token %}
+              <input type="hidden" name="plan" value="{{ p.key }}">
+              <button class="btn{% if p.key == 'growth' %} btn-primary{% endif %}" type="submit">{% if account.has_subscription and account.status != 'canceled' %}Switch to {{ p.name }}{% else %}Choose {{ p.name }}{% endif %}</button>
+            </form>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% if not stripe_ready %}<div class="card-body small muted pf-plans-note">Card payments aren't set up on this server yet (Stripe keys are missing).</div>{% endif %}
+    </section>
+  </div>
+
+  <div class="stack fluid">
+    <section class="card">
+      <div class="card-head"><h2>How billing works</h2></div>
+      <div class="card-body small">
+        <ul class="pf-rules">
+          <li>Payments, cards and invoices are handled by Stripe. ShipMatch never sees card numbers.</li>
+          <li>Switching plans takes effect at once; Stripe charges or credits the difference.</li>
+          <li>If you cancel, ShipMatch keeps working until the end of the paid month. After that new documents pause, and everything already in stays available.</li>
+        </ul>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head"><div><h2>Recent billing events</h2><p>From Stripe, newest first.</p></div></div>
+      {% if events %}
+      <ul class="plain-list">
+        {% for e in events %}<li><strong>{{ e.label }}</strong><span class="sub">{{ e.received_at|date:"j M Y, H:i" }}. {{ e.outcome|capfirst }}</span></li>{% endfor %}
+      </ul>
+      {% else %}<div class="card-body muted small">Nothing from Stripe yet.</div>{% endif %}
+    </section>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

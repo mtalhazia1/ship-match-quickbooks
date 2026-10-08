@@ -1,0 +1,38 @@
+{% load ui workflow_tags %}{% wf_bell as bell %}{% wf_prefs as wfp %}
+      <details class="wf-bell" data-menu>
+        <summary class="btn btn-quiet wf-icon-btn" aria-label="Notifications{% if bell.unread %}, {{ bell.unread }} unread{% endif %}" title="Notifications">{% icon "bell" %}{% if bell.unread %}<span class="wf-bell-n" aria-hidden="true">{% if bell.unread > 99 %}99+{% else %}{{ bell.unread }}{% endif %}</span>{% endif %}</summary>
+        <div class="menu-pop wf-bell-pop">
+          <div class="wf-bell-head">
+            <strong>Notifications</strong>
+            {% if bell.unread %}<form method="post" action="{% url 'workflow:notifications_read_all' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="link-btn small" type="submit">Mark all as read</button></form>{% endif %}
+          </div>
+          {% if bell.latest %}
+          <ul class="wf-bell-list">
+            {% for n in bell.latest %}
+            <li class="{% if not n.read_at %}unread{% endif %}">
+              <form method="post" action="{% url 'workflow:notification_open' n.pk %}">{% csrf_token %}
+                <button type="submit"><span class="wf-bell-title">{{ n.title }}</span><span class="wf-bell-meta">{{ n.organization.name }}, {{ n.created_at|timesince }} ago</span></button>
+              </form>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}<p class="wf-bell-empty">Nothing yet. When someone mentions you or assigns you a shipment, it shows here.</p>{% endif %}
+          <a class="wf-bell-all" href="{% url 'workflow:notifications' %}">See all notifications</a>
+        </div>
+      </details>
+      <button class="btn btn-quiet wf-icon-btn" type="button" data-wf-help-open aria-haspopup="dialog" aria-controls="wf-help" title="Keyboard shortcuts (?)">{% icon "keyboard" "Keyboard shortcuts" %}</button>
+      <dialog id="wf-help" class="wf-dialog" aria-labelledby="wf-help-title" data-wf-go-q="{% url 'review:queue' %}" data-wf-go-d="{% url 'review:documents' %}" data-wf-go-s="{% url 'savings:summary' %}">
+        <div class="wf-dialog-head">
+          <h2 id="wf-help-title">Keyboard shortcuts</h2>
+          <button class="btn btn-quiet btn-sm" type="button" data-wf-close aria-label="Close">{% icon "x" %}</button>
+        </div>
+        <div class="wf-dialog-body">
+          {% include "workflow/_shortcut_table.html" %}
+        </div>
+        <form class="wf-dialog-foot" method="post" action="{% url 'workflow:shortcuts' %}">{% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          {% if wfp.shortcuts %}<span class="small muted">Shortcuts are on for you.</span><button class="btn btn-sm" type="submit" name="shortcuts" value="off">Turn shortcuts off</button>
+          {% else %}<span class="small muted">Shortcuts are off for you.</span><button class="btn btn-sm btn-primary" type="submit" name="shortcuts" value="on">Turn shortcuts on</button>{% endif %}
+          <a class="btn btn-sm btn-quiet" href="{% url 'workflow:shortcuts' %}">More preferences</a>
+        </form>
+      </dialog>

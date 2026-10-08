@@ -1,0 +1,1 @@
+{% load ui disputes_tags %}{% overdue_dispute_count org as overdue_disputes %}<a href="{% url 'disputes:list' %}" class="{% if section == 'disputes' %}on{% endif %}">{% icon "send" %} Disputes{% if overdue_disputes %}<span class="count alert" title="Disputes past their follow-up date">{{ overdue_disputes }}</span>{% endif %}</a>

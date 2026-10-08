@@ -1,0 +1,70 @@
+{% load ui %}
+<div class="page-head">
+  <div>
+    <h1>What ShipMatch could save you</h1>
+    <p class="lede">A quick estimate from your own numbers: time no longer spent keying and checking freight invoices, and overcharges caught before payment. The values filled in are examples to replace, not industry figures.</p>
+  </div>
+  {% if user.is_authenticated and org %}<a class="btn" href="{% url 'savings:summary' %}">See your actual savings</a>{% endif %}
+</div>
+
+<div class="roi-grid">
+  <form class="card roi-form" method="get" action="{% url 'roi:calculator' %}" data-roi novalidate>
+    <div class="card-head"><div><h2>Your numbers</h2><p>Per month unless it says otherwise.</p></div>
+      <div class="inline-form"><label class="small muted" for="roi-currency">Currency</label>
+        <select id="roi-currency" name="currency">{% for c in currencies %}<option value="{{ c }}"{% if c == calc.currency %} selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="card-body roi-fields">
+      {% for row in rows %}
+      <div class="field{% if row.error %} has-error{% endif %}">
+        <label class="lbl" for="roi-{{ row.f.name }}">{{ row.f.label }}</label>
+        <div class="input-unit">
+          {% if row.f.unit == "money" %}<span class="unit" data-currency-label>{{ calc.currency }}</span>{% endif %}
+          <input id="roi-{{ row.f.name }}" type="number" name="{{ row.f.name }}" value="{{ row.value }}" min="{{ row.f.lo }}" max="{{ row.f.hi }}" step="{{ row.f.step }}" inputmode="decimal" data-default="{{ row.default }}" aria-describedby="roi-{{ row.f.name }}-hint">
+          {% if row.f.unit == "min" %}<span class="unit">min</span>{% elif row.f.unit == "%" %}<span class="unit">%</span>{% endif %}
+        </div>
+        <p class="hint" id="roi-{{ row.f.name }}-hint">{{ row.f.hint }}</p>
+        <ul class="errorlist" data-error-for="{{ row.f.name }}">{% if row.error %}<li>{{ row.error }}</li>{% endif %}</ul>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="card-body roi-actions">
+      <button class="btn btn-primary" type="submit" data-roi-submit>Calculate</button>
+      <a class="btn btn-quiet" href="{% url 'roi:calculator' %}">Back to the example values</a>
+    </div>
+  </form>
+
+  <section class="card roi-results" aria-live="polite">
+    <div class="card-head"><h2>Results</h2></div>
+    <div class="roi-hero">
+      <div class="k">Net benefit per year</div>
+      <div class="v num{% if r and r.net_year < 0 %} negative{% endif %}" data-out="net_year">{{ out.net_year }}</div>
+      <div class="d" data-out="payback_text">{{ out.payback_text }}</div>
+    </div>
+    <div class="metric-list">
+      <div class="metric"><div class="k">Hours saved per month</div><div class="v" data-out="hours_saved_month">{{ out.hours_saved_month }}</div></div>
+      <div class="metric"><div class="k">Labor saved per year</div><div class="v" data-out="labor_saved_year">{{ out.labor_saved_year }}</div></div>
+      <div class="metric"><div class="k">Overcharges caught per year</div><div class="v" data-out="overcharges_year">{{ out.overcharges_year }}</div></div>
+      <div class="metric"><div class="k">ShipMatch cost per year</div><div class="v" data-out="cost_year">{{ out.cost_year }}</div></div>
+      <div class="metric"><div class="k">Payback</div><div class="v" data-out="payback">{{ out.payback }}</div></div>
+      <div class="metric"><div class="k">Savings before ShipMatch cost</div><div class="v" data-out="gross_year">{{ out.gross_year }}</div></div>
+    </div>
+    <div class="card-body share-row">
+      <span class="small muted">Link with these numbers</span>
+      <div class="secret"><code id="roi-link" data-share-url>{{ share_url }}</code><button class="btn btn-sm" type="button" data-copy="#roi-link">Copy link</button></div>
+    </div>
+  </section>
+</div>
+
+<section class="card" style="margin-top:16px">
+  <div class="card-head"><h2>How this is worked out</h2></div>
+  <div class="card-body roi-notes small">
+    <ul>
+      <li><strong>Hours saved per month</strong> = invoices per month × (minutes per invoice today − minutes with ShipMatch) ÷ 60.</li>
+      <li><strong>Labor saved per year</strong> = hours saved per month × 12 × loaded hourly cost.</li>
+      <li><strong>Overcharges caught per year</strong> = invoices per month × 12 × share with an overcharge × average overcharge.</li>
+      <li><strong>Net benefit per year</strong> = labor saved + overcharges caught − 12 months of ShipMatch.</li>
+      <li><strong>Payback</strong> = a year of ShipMatch ÷ one month of savings: how many months of savings pay for the year.</li>
+    </ul>
+    <p class="muted">Assumptions: every overcharge caught is either not paid or credited back by the vendor; time saved is time the team can spend on other work. Not included: setup time, savings from fewer late-payment fees, or the cost of overcharges you would have found anyway. All figures come from the numbers entered above.</p>
+  </div>
+</section>

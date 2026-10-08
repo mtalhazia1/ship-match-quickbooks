@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% load ui customs_tags %}
+{% block title %}Customs settings{% endblock %}
+{% block content %}
+{% include "settings/_nav.html" %}
+<div class="grid-side">
+  <form method="post" class="card">{% csrf_token %}
+    <div class="card-head"><div><h2>Free time</h2><p>How last free days are counted when a notice prints only the number of free days, and when the team is told.</p></div></div>
+    <div class="card-body stack">
+      <div class="field{% if errors.lfd_alert_days %} has-error{% endif %}">
+        <label class="lbl" for="lfd_alert_days">Alert before the last free day</label>
+        <div class="cu-inline"><input class="cu-lead" id="lfd_alert_days" type="number" name="lfd_alert_days" min="0" max="{{ max_lead }}" value="{{ form.lfd_alert_days }}" required aria-describedby="lead-hint"><span class="muted">days</span></div>
+        {% if errors.lfd_alert_days %}<ul class="errorlist"><li>{{ errors.lfd_alert_days }}</li></ul>{% endif %}
+        <p class="hint" id="lead-hint">“Last free day in 2 days” goes to the alert channels once per container. 0 alerts on the day itself. A second alert follows if the day passes without a pickup or return.</p>
+      </div>
+      <label class="check"><input type="checkbox" name="count_weekends"{% if form.count_weekends %} checked{% endif %}>
+        <span><strong>Count weekends and holidays when a notice doesn't say</strong><span class="sub">Off: free days are working days unless the notice says calendar days. On: free days are calendar days unless the notice says working days. What a notice prints always wins.</span></span></label>
+      <div class="field{% if errors.holidays %} has-error{% endif %}">
+        <label class="lbl" for="holidays">Public holidays not counted as free days</label>
+        <textarea id="holidays" name="holidays" rows="6" class="cu-holidays" placeholder="2026-11-26&#10;2026-12-25&#10;2027-01-01" aria-describedby="holiday-hint">{{ form.holidays }}</textarea>
+        {% if errors.holidays %}<ul class="errorlist"><li>{{ errors.holidays }}</li></ul>{% endif %}
+        <p class="hint" id="holiday-hint">One date per line (YYYY-MM-DD), for the ports you use. Only used for working days.</p>
+      </div>
+      <div><button class="btn btn-primary" type="submit">Save settings</button></div>
+    </div>
+  </form>
+
+  <div class="stack cu-side">
+    <section class="card">
+      <div class="card-head"><div><h2>Duty checks</h2><p>Set by the server administrator (.env).</p></div></div>
+      <div class="card-body">
+        <dl class="kv">
+          <dt>Rounding allowed</dt><dd>{{ duty_tolerance|money }} per line and total</dd>
+          <dt>Entered value vs invoices</dt><dd>{{ value_tolerance }}% either way</dd>
+          <dt>Harbor maintenance fee</dt><dd>{{ hmf }}% of the entered value</dd>
+          <dt>Alerts sent from</dt><dd>{{ alert_hour }}:00 in {{ org_tz }}</dd>
+        </dl>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head"><div><h2>Merchandise processing fee</h2><p>{{ mpf_current.percent }}% of the entered value, kept between a minimum and a maximum that change every 1 October.</p></div></div>
+      <div class="table-wrap">
+        <table class="data compact">
+          <thead><tr><th>Entries from</th><th class="num">Minimum</th><th class="num">Maximum</th></tr></thead>
+          <tbody>{% for r in mpf_rows %}<tr{% if r == mpf_current %} class="cu-current"{% endif %}><td>{% if r.start.year > 1 %}{{ r.start|cu_day }}{% else %}Before 2018{% endif %}{% if r == mpf_current %}<span class="sub">In force today</span>{% endif %}</td><td class="num">{{ r.minimum|money:"USD" }}</td><td class="num">{{ r.maximum|money:"USD" }}</td></tr>{% endfor %}</tbody>
+        </table>
+      </div>
+      <div class="card-body small muted">Source of the row in force today: {{ mpf_current.source }}. Next year's amounts are added in the code or with CUSTOMS_MPF_TABLE.</div>
+    </section>
+  </div>
+</div>
+{% endblock %}

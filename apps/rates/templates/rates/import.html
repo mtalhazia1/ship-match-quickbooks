@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Import quotes{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'rates:list' %}">Rates</a>{% icon "chevron-right" %}<span>Import</span></div>
+    <h1>Import quotes from a CSV file</h1>
+    <p class="lede">Start from the template, one row per charge line. The whole file is checked first: if any row has a problem, nothing is imported and every problem is listed with its row number.</p>
+  </div>
+  <a class="btn" href="{% url 'rates:template' %}">{% icon "download" %} Download the template</a>
+</div>
+
+<div class="grid-side">
+  <div class="stack money-stack">
+    <section class="card">
+      <div class="card-head"><h2>Upload</h2></div>
+      <div class="card-body">
+        <form method="post" enctype="multipart/form-data" class="dropzone" data-dropzone>
+          {% csrf_token %}
+          {% icon "upload" %}
+          <div class="grow"><strong>Choose a CSV file</strong><span class="small muted" data-file-status>Comma, semicolon or tab separated, up to 2 MB and 5,000 rows.</span></div>
+          <label class="sr-only" for="file">CSV file</label>
+          <input id="file" type="file" name="file" accept=".csv,text/csv,.txt" required>
+          <button class="btn btn-primary" type="submit">Check and import</button>
+        </form>
+      </div>
+    </section>
+
+    {% if result and not result.ok %}
+    <section class="card import-problems" id="problems">
+      <div class="card-head"><div><h2>Nothing was imported</h2>
+        <p>{% if result.file_error %}{{ result.file_error }}{% else %}{{ result.errors|length }} problem{{ result.errors|length|pluralize }} in {{ result.rows }} row{{ result.rows|pluralize }}. Fix them in the file and upload it again.{% endif %}</p></div>
+        {% if result.errors %}<a class="btn btn-sm" href="{% url 'rates:import_errors' %}">{% icon "download" %} Download the list</a>{% endif %}</div>
+      {% if result.errors %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th class="num">Row</th><th>Column</th><th>Value</th><th>Problem</th></tr></thead>
+          <tbody>
+          {% for e in result.errors|slice:":200" %}
+          <tr><td class="num">{{ e.row }}</td><td class="mono small">{{ e.column }}</td><td class="mono small">{{ e.value|default:"(empty)"|truncatechars:40 }}</td><td>{{ e.message }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if result.errors|length > 200 %}<div class="card-body small muted">Showing the first 200. Download the list for all {{ result.errors|length }}.</div>{% endif %}
+      {% endif %}
+    </section>
+    {% endif %}
+
+    <section class="card">
+      <div class="card-head"><div><h2>Columns</h2><p>Column names are not case sensitive. Required columns are marked.</p></div></div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Column</th><th>What to put in it</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">vendor <span class="tag warning">required</span></td><td>The vendor's name as it appears on its invoices.</td></tr>
+            <tr><td class="mono">quote_reference</td><td>The vendor's quote or contract number.</td></tr>
+            <tr><td class="mono">origin</td><td>Port of loading, as a name (Ningbo) or UN/LOCODE (CNNGB). Empty means any.</td></tr>
+            <tr><td class="mono">destination</td><td>Port of discharge. Empty means any.</td></tr>
+            <tr><td class="mono">equipment</td><td>{% for code, name in equipment %}{{ code }}{% if not forloop.last %}, {% endif %}{% endfor %}. Empty means any. 40HQ and 20DV are understood too.</td></tr>
+            <tr><td class="mono">valid_from <span class="tag warning">required</span></td><td>First day the rates apply, as 2026-01-31 (31 Jan 2026 and 01/31/2026 work too).</td></tr>
+            <tr><td class="mono">valid_to</td><td>Last day. Empty means no end date.</td></tr>
+            <tr><td class="mono">currency <span class="tag warning">required</span></td><td>Three-letter code, e.g. USD.</td></tr>
+            <tr><td class="mono">all_in</td><td>yes if the ocean freight rate includes surcharges the quote doesn't list.</td></tr>
+            <tr><td class="mono">charge_code <span class="tag warning">required</span></td><td>A code from the list on the right, or a common name such as THC or BAF.</td></tr>
+            <tr><td class="mono">charge_description</td><td>How the vendor writes the charge (optional).</td></tr>
+            <tr><td class="mono">amount <span class="tag warning">required</span></td><td>The rate, e.g. 2400.00.</td></tr>
+            <tr><td class="mono">basis <span class="tag warning">required</span></td><td>container, shipment, bl, kg, cbm, day or hour.</td></tr>
+            <tr><td class="mono">notes</td><td>Anything to remember about the quote.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body small muted" style="border-top:1px solid var(--line)">Rows with the same vendor, quote reference, lane, equipment and start date make one quote. If that quote already exists, its charge lines are replaced by the ones in the file; otherwise a new quote is added. Every change is recorded in the audit log.</div>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="card-head"><div><h2>Charge codes</h2><p>Extra charges are checked against the approved list.</p></div></div>
+    <div class="table-wrap">
+      <table class="data compact">
+        <thead><tr><th>Code</th><th>Charge</th></tr></thead>
+        <tbody>{% for code, name in codes %}<tr><td class="mono small">{{ code }}</td><td class="small">{{ name }}{% if kinds|get:code == "accessorial" %} <span class="tag warning">extra</span>{% endif %}</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

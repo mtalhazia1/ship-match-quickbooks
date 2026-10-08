@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% load ui review_tags %}
+{% block title %}Reading accuracy{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Reading accuracy</h1>
+    <p class="lede">How often the automatic reading was right, measured from what reviewers changed{% if scope == "reviewed" %} on approved and posted shipments{% endif %}. Last {{ days }} days.</p>
+  </div>
+  <div class="actions">
+    <nav class="tabs" style="margin:0;border:0" aria-label="Period">
+      <a href="?days=30&amp;scope={{ scope }}" class="{% if days == 30 %}on{% endif %}">30 days</a>
+      <a href="?days=90&amp;scope={{ scope }}" class="{% if days == 90 %}on{% endif %}">90 days</a>
+      <a href="?days=365&amp;scope={{ scope }}" class="{% if days == 365 %}on{% endif %}">1 year</a>
+    </nav>
+    {% if scope == "reviewed" %}<a class="btn btn-sm" href="?days={{ days }}&amp;scope=all">Include unreviewed</a>
+    {% else %}<a class="btn btn-sm" href="?days={{ days }}">Reviewed only</a>{% endif %}
+  </div>
+</div>
+
+{% if not r.documents %}
+<section class="card"><div class="empty">{% icon "check" %}<h3>No reviewed documents yet</h3>
+  <p class="muted">Accuracy appears once shipments are approved. Each value a reviewer corrects counts as an error; everything left unchanged counts as right.</p></div></section>
+{% else %}
+<div class="kpis">
+  <div class="kpi"><div class="k">Fields read correctly</div><div class="v">{{ r.field_rate }}%</div>
+    <div class="d">{{ r.fields_correct }} of {{ r.fields_total }} values</div></div>
+  <div class="kpi"><div class="k">Documents with no corrections</div><div class="v">{{ r.doc_rate }}%</div>
+    <div class="d">{{ r.documents_all_correct }} of {{ r.documents }} documents</div></div>
+  <div class="kpi"><div class="k">Type and shipment fixes</div><div class="v">{{ r.type_fixes|add:r.moves }}</div>
+    <div class="d">{{ r.type_fixes }} type change{{ r.type_fixes|pluralize }}, {{ r.moves }} move{{ r.moves|pluralize }}</div></div>
+  <div class="kpi"><div class="k">AI cost per document</div><div class="v">{% if r.cost_per_document is not None %}${{ r.cost_per_document }}{% else %}–{% endif %}</div>
+    <div class="d">{% if r.ai_documents %}${{ r.cost_usd }} for {{ r.ai_documents }} documents (estimate){% else %}No AI reading in this period{% endif %}</div></div>
+</div>
+
+<div class="grid-side">
+  <section class="card">
+    <div class="card-head"><div><h2>By field</h2><p>Weakest first. Wrong = a reviewer changed the value; missed = a reviewer had to type it.</p></div></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Field</th><th>Document type</th><th class="num">Values</th><th class="num">Wrong</th><th class="num">Missed</th><th class="num">Correct</th></tr></thead>
+        <tbody>
+        {% for s in r.by_field %}
+          <tr>
+            <td>{{ s.name|label }}</td>
+            <td class="muted">{{ s.doc_type|label }}</td>
+            <td class="num">{{ s.total }}</td>
+            <td class="num">{{ s.wrong|default:"" }}</td>
+            <td class="num">{{ s.missed|default:"" }}</td>
+            <td class="num"><strong>{{ s.rate }}%</strong></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="stack">
+    <section class="card">
+      <div class="card-head"><h2>By reader</h2></div>
+      <div class="table-wrap"><table class="data">
+        <thead><tr><th>Reader</th><th class="num">Values</th><th class="num">Correct</th></tr></thead>
+        <tbody>{% for name, v in r.by_provider.items %}<tr><td>{% if name == "anthropic" %}Claude{% elif name == "rules" %}Built-in rules{% else %}{{ name|capfirst }}{% endif %}</td><td class="num">{{ v.total }}</td><td class="num">{{ v.rate }}%</td></tr>{% endfor %}</tbody>
+      </table></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Latest corrections</h2></div>
+      {% if r.recent %}
+      <ol class="timeline">
+        {% for c in r.recent %}
+        <li><div><a href="{% url 'review:document' c.doc.pk %}">{{ c.doc.original_filename|truncatechars:34 }}</a></div>
+          <div class="small">{{ c.field|label }}: <span class="muted">{{ c.old }}</span> to <strong>{{ c.new }}</strong></div>
+          <div class="when">{{ c.who|display_name }}, {{ c.at|date:"j M, H:i" }}</div></li>
+        {% endfor %}
+      </ol>
+      {% else %}<div class="card-body muted small">No corrections. Every value was accepted as read.</div>{% endif %}
+    </section>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

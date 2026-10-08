@@ -1,0 +1,1 @@
+{% load ui workflow_tags %}{% wf_nav as wfn %}{% if wfn.assigned_url %}<a href="{{ wfn.assigned_url }}" class="wf-nav-sub">{% icon "user-check" %} Assigned to me{% if wfn.assigned %}<span class="count" title="Shipments assigned to you that are still open">{{ wfn.assigned }}</span>{% endif %}</a>{% endif %}

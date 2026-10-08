@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% load ui humanize %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Dashboard</h1>
+    <p class="lede">{{ org.name }}. Queue numbers are live; rates cover the last {{ days }} days.</p>
+  </div>
+  <nav class="tabs" style="margin:0;border:0" aria-label="Period">
+    <a href="?days=7" class="{% if days == 7 %}on{% endif %}">7 days</a>
+    <a href="?days=30" class="{% if days == 30 %}on{% endif %}">30 days</a>
+    <a href="?days=90" class="{% if days == 90 %}on{% endif %}">90 days</a>
+  </nav>
+</div>
+
+{% include "billing/_onboarding.html" %}
+
+<div class="kpis">
+  <a class="kpi{% if d.needs_review %} attention{% endif %}" href="{% url 'review:queue' %}?status=needs_review">
+    <div class="k">Needs review</div>
+    <div class="v">{{ d.needs_review }}</div>
+    <div class="d">{% if d.oldest_waiting_hours is not None %}Oldest waiting {{ d.oldest_waiting_hours|duration }}{% else %}Nothing waiting{% endif %}</div>
+  </a>
+  <a class="kpi" href="{% url 'review:queue' %}?status=ready">
+    <div class="k">Ready to approve</div>
+    <div class="v">{{ d.ready }}</div>
+    <div class="d">No open issues</div>
+  </a>
+  <a class="kpi{% if d.loose_documents %} attention{% endif %}" href="{% url 'review:documents' %}">
+    <div class="k">Documents not in a shipment</div>
+    <div class="v">{{ d.loose_documents }}</div>
+    <div class="d">Scanned, unreadable or unmatched</div>
+  </a>
+  <a class="kpi" href="{% url 'review:queue' %}?status=approved">
+    <div class="k">Approved, not posted</div>
+    <div class="v">{{ d.approved }}</div>
+    <div class="d">{{ d.posted }} posted to accounting</div>
+  </a>
+  {% include "rates/_dashboard_tile.html" %}
+  {% include "close/_dashboard_tile.html" %}
+</div>
+{% include "accounting/_dashboard_aging.html" %}
+
+<div class="grid-2">
+  <section class="card">
+    <div class="card-head"><div><h2>Open issues by type</h2><p>Unresolved checks on shipments still in review</p></div></div>
+    <div class="card-body">
+      {% if d.issues_by_type %}
+        {% with top=d.issues_by_type.0.value %}
+        <div class="hbars">
+          {% for b in d.issues_by_type %}
+          <div class="hbar-row" title="{{ b.label }}: {{ b.value|floatformat:0 }} open ({{ b.detail|lower }})">
+            <span class="hbar-label">{{ b.label }} <span class="sub">{{ b.detail }}</span></span>
+            <span class="hbar"><span style="width:{% widthratio b.value top 100 %}%"></span></span>
+            <span class="hbar-val num">{{ b.value|floatformat:0 }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endwith %}
+      {% else %}
+        <div class="empty">{% icon "check" %}<h3>No open issues</h3><p class="muted">Every shipment in review has passed its checks.</p></div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><div><h2>Documents received</h2><p>Per day, last 14 days, {{ timezone_name }}</p></div>
+      <span class="num muted">{{ d.documents_received }} in {{ days }} days</span></div>
+    <div class="card-body">
+      <div class="vbars" role="img" aria-label="Bar chart of documents received per day over the last 14 days">
+        {% for b in d.docs_per_day %}
+        <div class="vbar{% if not b.value %} zero{% endif %}" title="{{ b.label }}: {{ b.value }} document{{ b.value|pluralize }}"><span style="height:{% widthratio b.value d.docs_max 100 %}%"></span></div>
+        {% endfor %}
+      </div>
+      <div class="vbar-axis" aria-hidden="true"><span>{{ d.docs_per_day.0.label }}</span><span>{{ d.docs_per_day.7.label }}</span><span>{{ d.docs_per_day.13.label }}</span></div>
+    </div>
+    <details class="chart-table">
+      <summary>Show as a table</summary>
+      <table class="data">
+        <thead><tr><th>Day</th><th class="num">Documents</th></tr></thead>
+        <tbody>{% for b in d.docs_per_day %}<tr><td>{{ b.label }}</td><td class="num">{{ b.value }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </details>
+  </section>
+</div>
+
+{% include "customs/_dashboard.html" %}
+<div class="grid-2" style="margin-top:16px">
+  <section class="card">
+    <div class="card-head"><div><h2>Waiting longest</h2><p>Shipments in review, most errors first</p></div>
+      <a class="btn btn-sm" href="{% url 'review:queue' %}">Open queue</a></div>
+    {% if d.attention %}
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Shipment</th><th>Open issues</th><th>Waiting</th></tr></thead>
+        <tbody>
+        {% for s in d.attention %}
+          <tr>
+            <td><a class="row-link" href="{% url 'review:shipment' s.pk %}">{{ s.reference }}</a><span class="sub">B/L {{ s.bl_number|default:"not received" }}</span></td>
+            <td><div class="tags">
+              {% if s.n_errors %}<span class="tag error">{{ s.n_errors }} error{{ s.n_errors|pluralize }}</span>{% endif %}
+              {% if s.n_warnings %}<span class="tag warning">{{ s.n_warnings }} warning{{ s.n_warnings|pluralize }}</span>{% endif %}
+            </div></td>
+            <td class="muted">{{ s.created_at|timesince }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">{% icon "check" %}<h3>Queue is clear</h3><p class="muted">New documents appear here as they arrive.</p></div>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <div class="card-head"><div><h2>How the process is running</h2><p>Last {{ days }} days</p></div></div>
+    <div class="metric-list">
+      <div class="metric"><div class="k">Shipments with no manual work</div>
+        <div class="v">{% if d.straight_through_rate is not None %}{{ d.straight_through_rate }}%{% else %}–{% endif %}</div></div>
+      <div class="metric"><div class="k">Fields corrected by people</div>
+        <div class="v">{% if d.correction_rate is not None %}{{ d.correction_rate }}%{% else %}–{% endif %}</div></div>
+      <div class="metric"><div class="k">Median time to approval</div>
+        <div class="v">{{ d.median_cycle_hours|duration }}</div></div>
+      <div class="metric"><div class="k">Posted to accounting</div>
+        <div class="v">{% for cur, amount in d.posted_value.items %}{{ amount|money:cur }}{% if not forloop.last %}<br>{% endif %}{% empty %}–{% endfor %}</div></div>
+    </div>
+    <div class="card-body" style="border-top:1px solid var(--line)">
+      {% include "accounting/_connection_badge.html" %}
+    </div>
+  </section>
+</div>
+{% endblock %}

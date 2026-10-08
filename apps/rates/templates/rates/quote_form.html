@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% load ui static %}
+{% block title %}{% if quote %}Edit {{ quote.title }}{% else %}New quote{% endif %}{% endblock %}
+{% block scripts %}<script src="{% static 'js/rates.js' %}" defer></script>{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'rates:list' %}">Rates</a>{% icon "chevron-right" %}
+      {% if quote %}<a href="{% url 'rates:detail' quote.pk %}">{{ quote.title }}</a>{% icon "chevron-right" %}<span>Edit</span>
+      {% else %}<span>New quote</span>{% endif %}</div>
+    <h1>{% if quote %}Edit {{ quote.title }}{% elif copy_from %}New period for {{ copy_from.title }}{% else %}New quote{% endif %}</h1>
+    <p class="lede">{% if copy_from %}Copied from {{ copy_from.title }} ({{ copy_from.valid_from|date:"j M Y" }}{% if copy_from.valid_to %} to {{ copy_from.valid_to|date:"j M Y" }}{% endif %}). Change the dates and any rates that changed.{% else %}One quote covers one vendor, lane and equipment type for a period. Invoices from this vendor on this lane are checked against it.{% endif %}</p>
+  </div>
+</div>
+
+<form method="post" class="stack money-stack quote-form" novalidate>
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="flash"><li class="error">{{ form.non_field_errors|join:" " }}</li></div>{% endif %}
+  <section class="card">
+    <div class="card-head"><div><h2>Vendor, lane and period</h2><p>Write the vendor's name as it appears on its invoices. Ports can be names or UN/LOCODEs (CNNGB); leave a port empty to accept any.</p></div></div>
+    <div class="card-body form-grid">
+      {% include "rates/_field.html" with field=form.vendor_name %}
+      {% include "rates/_field.html" with field=form.reference hint="The vendor's quote or contract number" %}
+      {% include "rates/_field.html" with field=form.origin hint="Port of loading. Empty means any origin" %}
+      {% include "rates/_field.html" with field=form.destination hint="Port of discharge. For drayage, the port the truck collects from" %}
+      {% include "rates/_field.html" with field=form.equipment hint="Read from the bill of lading, e.g. 40HC" %}
+      {% include "rates/_field.html" with field=form.currency hint="Three-letter code" %}
+      {% include "rates/_field.html" with field=form.valid_from %}
+      {% include "rates/_field.html" with field=form.valid_to hint="Empty means no end date" %}
+    </div>
+    <div class="card-body" style="border-top:1px solid var(--line)">
+      <label class="check">{{ form.all_in }}
+        <span><strong>All-in rate</strong><span class="sub">The ocean freight rate includes surcharges the quote doesn't list (BAF, CAF ...). Those charges are then added to ocean freight before comparing.</span></span></label>
+      <div class="field" style="margin-top:14px">
+        <label class="lbl" for="{{ form.notes.id_for_label }}">Notes <span class="muted small">(optional)</span></label>
+        {{ form.notes }}
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><div><h2>Charges</h2><p>One line per charge, in the quote's currency. A charge an invoice has but the quote doesn't list counts as quoted at zero.</p></div></div>
+    {{ formset.management_form }}
+    {% if formset.non_form_errors %}<div class="card-body"><ul class="errorlist">{% for e in formset.non_form_errors %}<li>{% if "at least" in e %}Add at least one charge line.{% else %}{{ e }}{% endif %}</li>{% endfor %}</ul></div>{% endif %}
+    <div class="table-wrap">
+      <table class="data charge-lines">
+        <thead><tr><th>Charge</th><th>As the vendor writes it</th><th class="num">Amount</th><th>Basis</th><th><span class="sr-only">Remove</span></th></tr></thead>
+        <tbody data-charge-rows>
+        {% for cf in formset %}
+          {% include "rates/_charge_row.html" with cf=cf %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <template id="charge-row-template">{% include "rates/_charge_row.html" with cf=formset.empty_form %}</template>
+    <div class="card-body" style="border-top:1px solid var(--line)">
+      <button class="btn btn-sm" type="button" data-add-charge hidden>{% icon "plus" %} Add a line</button>
+      <span class="hint" data-no-js-hint>Need more lines? Save, then edit the quote again.</span>
+    </div>
+  </section>
+
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">{% icon "check" %} Save quote</button>
+    <a class="btn btn-quiet" href="{% if quote %}{% url 'rates:detail' quote.pk %}{% else %}{% url 'rates:list' %}{% endif %}">Cancel</a>
+  </div>
+</form>
+
+<datalist id="vendor-names">{% for n in vendor_names %}<option value="{{ n }}">{% endfor %}</datalist>
+<datalist id="port-names">{% for p in ports %}<option value="{{ p }}">{% endfor %}</datalist>
+{% endblock %}

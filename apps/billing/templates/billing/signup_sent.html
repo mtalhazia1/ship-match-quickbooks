@@ -1,0 +1,20 @@
+{% extends "demo/public_base.html" %}
+{% load ui %}
+{% block title %}Check your email{% endblock %}
+{% block content %}
+<div class="pf-public-narrow">
+  <section class="card">
+    <div class="card-body stack">
+      <div class="pf-public-icon">{% icon "send" %}</div>
+      <h1>Check your email</h1>
+      <p>We sent a confirmation link to {% if email %}<strong>{{ email }}</strong>{% else %}the address you entered{% endif %}. Open it to finish creating your account. It works for {{ verify_hours }} hours.</p>
+      <p class="small muted">Nothing arrived after a few minutes? Check the spam folder, or send the link again.</p>
+      <form method="post" action="{% url 'signup:resend' %}" class="inline-form">{% csrf_token %}
+        <label class="sr-only" for="resend-email">Email address</label>
+        <input id="resend-email" type="email" name="email" value="{{ email }}" placeholder="you@company.com" required>
+        <button class="btn" type="submit">Send the link again</button>
+      </form>
+    </div>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>{{ m.title }}</title></head>
+<body style="margin:0;padding:0;background:#f1f3f6;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#15212c">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f3f6;padding:24px 12px">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border:1px solid #dde3ea;border-radius:10px">
+      <tr><td style="background:#102a43;color:#ffffff;padding:14px 22px;border-radius:10px 10px 0 0;font-weight:600;font-size:15px">ShipMatch{% if m.org_name %} <span style="color:#b8c7d6;font-weight:400">for {{ m.org_name }}</span>{% endif %}</td></tr>
+      <tr><td style="padding:22px 22px 6px;border-left:4px solid {{ color }}">
+        <h1 style="margin:0 0 8px;font-size:20px;line-height:1.3;color:#15212c">{{ m.title }}</h1>
+        <p style="margin:0 0 14px;font-size:15px;line-height:1.5;color:#445566">{{ m.text }}</p>
+      </td></tr>
+      {% if m.facts %}
+      <tr><td style="padding:0 22px 10px">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px">
+          {% for f in m.facts %}
+          <tr><td style="padding:7px 12px 7px 0;color:#64748b;border-top:1px solid #edf0f3;width:42%;vertical-align:top">{{ f.0 }}</td>
+              <td style="padding:7px 0;border-top:1px solid #edf0f3;font-weight:600;vertical-align:top">{{ f.1 }}</td></tr>
+          {% endfor %}
+        </table>
+      </td></tr>
+      {% endif %}
+      {% if m.url %}
+      <tr><td style="padding:8px 22px 22px"><a href="{{ m.url }}" style="display:inline-block;background:#0e6b67;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:600;font-size:14px">{{ m.link_label }}</a></td></tr>
+      {% endif %}
+      <tr><td style="padding:14px 22px;border-top:1px solid #dde3ea;font-size:12px;color:#64748b">{{ footer }}. Change which alerts you get in ShipMatch under Settings &gt; Alerts.</td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>

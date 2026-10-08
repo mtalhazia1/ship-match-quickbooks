@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Notifications{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Notifications</h1>
+    <p class="lede">Mentions, replies to your comments and shipments assigned to you, from every organization you work in.</p>
+  </div>
+  <div class="actions">
+    {% if unread %}<form method="post" action="{% url 'workflow:notifications_read_all' %}">{% csrf_token %}<button class="btn" type="submit">{% icon "check" %} Mark all as read</button></form>{% endif %}
+    <a class="btn btn-quiet" href="{% url 'workflow:shortcuts' %}">{% icon "sliders" %} Email preferences</a>
+  </div>
+</div>
+
+<nav class="tabs" aria-label="Which notifications">
+  <a href="?show=unread" class="{% if show == 'unread' %}on{% endif %}"{% if show == 'unread' %} aria-current="page"{% endif %}>Unread<span class="n">{{ unread }}</span></a>
+  <a href="?show=all" class="{% if show == 'all' %}on{% endif %}"{% if show == 'all' %} aria-current="page"{% endif %}>All</a>
+</nav>
+
+<section class="card">
+  {% if page.object_list %}
+  <ul class="wf-notes">
+    {% for n in page %}
+    <li class="{% if not n.read_at %}unread{% endif %}">
+      <span class="wf-note-icon" aria-hidden="true">{% if n.kind == "assigned" %}{% icon "user-check" %}{% else %}{% icon "message" %}{% endif %}</span>
+      <div class="wf-note-main">
+        <form method="post" action="{% url 'workflow:notification_open' n.pk %}">{% csrf_token %}
+          <button class="wf-note-link" type="submit">{{ n.title }}</button>
+        </form>
+        {% if n.body %}<p class="wf-note-body">{{ n.body }}</p>{% endif %}
+        <span class="sub">{{ n.organization.name }}, <time datetime="{{ n.created_at|date:'c' }}" title="{{ n.created_at|date:'j M Y, H:i' }}">{{ n.created_at|timesince }} ago</time>{% if not n.read_at %}<span class="sr-only">, unread</span>{% endif %}</span>
+      </div>
+      {% if not n.read_at %}<span class="wf-dot" title="Unread" aria-hidden="true"></span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% include "includes/pager.html" %}
+  {% else %}
+  <div class="empty">{% icon "bell" %}
+    {% if show == "unread" %}<h2>You're all caught up</h2><p class="muted">Nothing unread. <a href="?show=all">See earlier notifications</a>.</p>
+    {% else %}<h2>No notifications yet</h2><p class="muted">When a teammate mentions you with @ or assigns you a shipment, it shows here.</p>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

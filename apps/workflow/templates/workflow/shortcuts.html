@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Keyboard shortcuts{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'accounts:security' %}">Your account</a>{% icon "chevron-right" %}<span>Shortcuts and notifications</span></div>
+    <h1>Keyboard shortcuts</h1>
+    <p class="lede">Review and approve without the mouse. Press <kbd class="wf-kbd">?</kbd> on any page to see this list.</p>
+  </div>
+</div>
+
+<div class="grid-side">
+  <section class="card" aria-labelledby="wf-keys-title">
+    <div class="card-head"><h2 id="wf-keys-title">Shortcuts</h2>{% if prefs.shortcuts %}<span class="badge ok">On</span>{% else %}<span class="badge neutral">Off</span>{% endif %}</div>
+    {% include "workflow/_shortcut_table.html" %}
+  </section>
+
+  <form class="card" method="post" action="{% url 'workflow:shortcuts' %}">{% csrf_token %}
+    <input type="hidden" name="full" value="1">
+    <div class="card-head"><h2>Your preferences</h2></div>
+    <div class="card-body stack">
+      <label class="check"><input type="checkbox" name="shortcuts"{% if prefs.shortcuts %} checked{% endif %}><span class="wf-opt"><strong>Keyboard shortcuts</strong><span class="hint">Turn off if they get in the way of your screen reader or other tools.</span></span></label>
+      <label class="check"><input type="checkbox" name="email_mentions"{% if prefs.email_mentions %} checked{% endif %}><span><strong>Email me when someone mentions me or replies to my comment</strong></span></label>
+      <label class="check"><input type="checkbox" name="email_assignments"{% if prefs.email_assignments %} checked{% endif %}><span><strong>Email me when a shipment is assigned to me</strong></span></label>
+      <p class="hint">Notifications always appear under the bell in the top bar. These settings are yours alone and apply in every organization.</p>
+      <div><button class="btn btn-primary" type="submit">Save preferences</button></div>
+    </div>
+  </form>
+</div>
+{% endblock %}

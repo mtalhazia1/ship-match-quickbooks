@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Invitation not available{% endblock %}
+{% block content %}
+<div class="error-page">
+  <div class="code">Invitation</div>
+  {% if reason == "other_account" %}
+  <h1>This invitation is for a different account</h1>
+  <p>You're signed in as {{ user.email|default:user.get_username }}, but the invitation to {{ org.name }} was sent to someone else. Nothing was changed.</p>
+  <p>Sign out and sign in with the account the email was sent to, then open the link again.</p>
+  {% elif reason == "withdrawn" %}
+  <h1>This invitation is no longer available</h1>
+  <p>The organization or the person who invited you no longer exists or no longer manages it. Nothing was changed. Ask them to invite you again.</p>
+  {% else %}
+  <h1>This invitation has expired or isn't valid</h1>
+  <p>Invitations work for 7 days, and the link must be copied completely. Nothing was changed. Ask the organization's admin to invite you again.</p>
+  {% endif %}
+  <p><a class="btn btn-primary" href="{% url 'core:dashboard' %}">Go to my dashboard</a></p>
+</div>
+{% endblock %}

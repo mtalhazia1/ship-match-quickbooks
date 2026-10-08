@@ -1,0 +1,16 @@
+{% load ui %}<div class="page-head">
+  <div>
+    <h1>Rates</h1>
+    <p class="lede">The rates each vendor agreed to, by lane and equipment. Every freight invoice is compared with them, so charges above the quote or extras nobody approved are flagged before anyone pays.</p>
+  </div>
+  <div class="actions">
+    {% if tab == "quotes" %}
+      <a class="btn" href="{% url 'rates:export' %}{% if export_query %}?{{ export_query }}{% endif %}">{% icon "download" %} Export CSV</a>
+      {% if can_edit %}<a class="btn" href="{% url 'rates:import' %}">{% icon "upload" %} Import CSV</a>
+      <a class="btn btn-primary" href="{% url 'rates:create' %}">{% icon "plus" %} New quote</a>{% endif %}
+    {% elif tab == "extras" and can_edit %}
+      <a class="btn btn-primary" href="{% url 'rates:extra_create' %}{% if vendor %}?vendor={{ vendor|urlencode }}{% endif %}">{% icon "plus" %} Approve an extra charge</a>
+    {% endif %}
+  </div>
+</div>
+{% include "rates/_tabs.html" %}

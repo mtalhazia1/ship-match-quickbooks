@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Bulk action result{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{{ back }}">Review queue</a>{% icon "chevron-right" %}<span>Bulk action</span></div>
+    <h1>{% if action == "approve" %}Bulk approval{% elif action == "post" %}Bulk posting{% else %}Bulk assignment{% endif %}</h1>
+    <p class="lede">{{ done }} done, {{ skipped }} skipped, {{ at|date:"j M Y, H:i" }}. Each shipment has its own entry in the audit log with batch {{ batch_id|slice:":8" }}.</p>
+  </div>
+  <a class="btn" href="{{ back }}">{% icon "arrow-left" %} Back to the queue</a>
+</div>
+<section class="card">
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Shipment</th><th>Result</th>{% if skipped %}<th>Why it was skipped</th>{% endif %}</tr></thead>
+      <tbody>
+      {% for l in lines %}
+      <tr>
+        <td>{% if l.shipment %}<a class="row-link" href="{% url 'review:shipment' l.shipment.pk %}">{{ l.reference }}</a>{% else %}{{ l.reference }}{% endif %}</td>
+        <td class="nowrap">{% if l.ok %}<span class="tag ok">{% icon "check" %} {{ l.detail }}</span>{% else %}<span class="tag warning">{% icon "alert" %} Skipped</span>{% endif %}</td>
+        {% if skipped %}<td>{% if l.reasons %}<ul class="wf-reasons">{% for r in l.reasons %}<li>{{ r }}</li>{% endfor %}</ul>{% else %}<span class="muted small">–</span>{% endif %}</td>{% endif %}
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

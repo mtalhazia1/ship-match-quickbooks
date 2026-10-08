@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Link not valid{% endblock %}
+{% block content %}
+<div class="error-page">
+  <div class="code">Approval link</div>
+  <h1>This link isn't valid</h1>
+  <p>The link was changed or cut short on its way to you, so ShipMatch can't tell which shipment it meant. Nothing was approved.</p>
+  <p>Open the review queue and find the shipment there, or copy the whole link from the alert again.</p>
+  <p><a class="btn btn-primary" href="{% url 'review:queue' %}?status=ready">Open shipments ready to approve</a></p>
+</div>
+{% endblock %}

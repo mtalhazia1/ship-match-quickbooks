@@ -1,0 +1,29 @@
+{% load ui workflow_tags %}{% wf_shipment shipment as wa %}{% if wa %}
+<section class="wf-strip" aria-label="Assignment and navigation">
+  <div class="wf-strip-who">
+    {% icon "user-check" %}
+    {% if wa.assignee %}<span>Assigned to <strong>{% if wa.assignee.pk == user.pk %}you{% else %}{{ wa.assignee|display_name }}{% endif %}</strong>
+      <span class="muted small">{% if wa.assignment.assigned_by %}by {{ wa.assignment.assigned_by|display_name }}{% else %}by the assignment rules{% endif %}, {{ wa.assignment.assigned_at|timesince }} ago</span></span>
+    {% else %}<span class="muted">Nobody is assigned to this shipment.</span>{% endif %}
+  </div>
+  {% if can.edit %}
+  <form class="inline-form wf-strip-form" method="post" action="{% url 'workflow:assign' shipment.pk %}">{% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <label class="sr-only" for="wf-assignee">Assign to</label>
+    <select id="wf-assignee" name="assignee">
+      <option value="none"{% if not wa.assignee %} selected{% endif %}>Nobody</option>
+      {% for p in wa.people %}<option value="{{ p.pk }}"{% if wa.assignee and p.pk == wa.assignee.pk %} selected{% endif %}>{{ p|display_name }}{% if p.pk == user.pk %} (you){% endif %}</option>{% endfor %}
+    </select>
+    <button class="btn btn-sm" type="submit">Assign</button>
+    {% if wa.me_assignable and wa.assignee.pk != user.pk %}<button class="btn btn-sm btn-quiet" type="submit" name="assignee" value="me">Assign to me</button>{% endif %}
+  </form>
+  {% endif %}
+  <nav class="wf-strip-nav" aria-label="Other shipments in this tab">
+    {% if wa.prev %}<a class="btn btn-sm btn-quiet" href="{% url 'review:shipment' wa.prev.pk %}" rel="prev" data-wf-prev title="Previous shipment (k)" aria-label="Previous shipment, {{ wa.prev.reference }}">{% icon "chevron-left" %} {{ wa.prev.reference }}</a>{% endif %}
+    {% if wa.next %}<a class="btn btn-sm btn-quiet" href="{% url 'review:shipment' wa.next.pk %}" rel="next" data-wf-next title="Next shipment (j)" aria-label="Next shipment, {{ wa.next.reference }}">{{ wa.next.reference }} {% icon "chevron-right" %}</a>{% endif %}
+  </nav>
+</section>
+{% if can.approve and not shipment.is_locked and shipment.status != "rejected" %}
+{% include "workflow/_approve_dialog.html" %}
+{% endif %}
+{% endif %}

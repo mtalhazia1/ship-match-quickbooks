@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% load ui disputes_tags %}
+{% block title %}{{ dispute.reference }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'disputes:list' %}">Disputes</a>{% icon "chevron-right" %}<span>{{ dispute.reference }}</span></div>
+    <div class="actions" style="gap:12px"><h1>{{ dispute.reference }}</h1><span class="badge {{ dispute.status|dispute_badge }}">{{ dispute.get_status_display }}</span></div>
+    <dl class="meta-grid">
+      <div><dt>Vendor</dt><dd>{{ dispute.vendor_name }}</dd></div>
+      <div><dt>Invoice</dt><dd>{% if dispute.invoice %}<a href="{% url 'review:document_file' dispute.invoice.pk %}" target="_blank" rel="noopener">{{ dispute.invoice_number|default:dispute.invoice.original_filename }}</a>{% else %}{{ dispute.invoice_number|default:"–" }}{% endif %}</dd></div>
+      <div><dt>Shipment</dt><dd>{% if dispute.shipment_id %}<a href="{% url 'review:shipment' dispute.shipment_id %}#disputes">{{ dispute.shipment_reference }}</a>{% else %}{{ dispute.shipment_reference|default:"–" }}{% endif %}</dd></div>
+      <div><dt>Disputed</dt><dd>{{ dispute.amount_disputed|money:dispute.currency }}</dd></div>
+      <div><dt>Recovered</dt><dd>{% if dispute.amount_recovered %}{{ dispute.amount_recovered|money:dispute.currency }}{% else %}–{% endif %}</dd></div>
+      {% if dispute.sent_at %}<div><dt>Sent</dt><dd>{{ dispute.sent_at|date:"j M Y" }}{% if dispute.days_open is not None %} <span class="muted small">({{ dispute.days_open }} day{{ dispute.days_open|pluralize }})</span>{% endif %}</dd></div>{% endif %}
+      {% if dispute.is_waiting and dispute.follow_up_on %}<div><dt>Follow up</dt><dd>{{ dispute.follow_up_on|date:"j M Y" }}</dd></div>{% endif %}
+    </dl>
+  </div>
+</div>
+
+{# ---------------------------------------------------------------- state banner #}
+{% if dispute.status == "draft" %}
+  <div class="decision">{% icon "info" %}<div class="grow"><strong>Not sent yet.</strong> A reviewer or approver can finish the draft; an approver sends it.</div></div>
+{% elif dispute.is_overdue %}
+  <div class="decision blocked">{% icon "clock" %}
+    <div class="grow"><strong>No answer since the follow-up date ({{ dispute.follow_up_on|date:"j M Y" }}).</strong>
+      Contact {{ dispute.vendor_name }} again, then log their reply or set a new follow-up date.{% if dispute.holds_shipment %} {{ dispute.shipment_reference }} stays on hold meanwhile.{% endif %}</div>
+    {% include "disputes/_release_action.html" %}
+  </div>
+{% elif dispute.holds_shipment %}
+  <div class="decision blocked">{% icon "lock" %}
+    <div class="grow"><strong>{{ dispute.shipment_reference }} is on hold until the vendor answers.</strong>
+      Its disputed issues stay open and it can't be approved. Record the credit when it arrives{% if can.approve and not shipment_locked %}, or approve without waiting{% endif %}.</div>
+    {% include "disputes/_release_action.html" %}
+  </div>
+{% elif dispute.status == "resolved" %}
+  <div class="decision done">{% icon "check" %}<div class="grow"><strong>Resolved.</strong> Recovered {{ dispute.amount_recovered|money:dispute.currency }} of {{ dispute.amount_disputed|money:dispute.currency }}{% if dispute.credit_note %} with {{ dispute.credit_note.original_filename }}{% endif %}.{% if dispute.outcome_note %} “{{ dispute.outcome_note }}”{% endif %}</div></div>
+{% elif dispute.status == "closed" %}
+  <div class="decision rejected">{% icon "x" %}<div class="grow"><strong>Closed without recovery.</strong> “{{ dispute.outcome_note }}”</div></div>
+{% elif dispute.status == "credit_received" %}
+  <div class="decision ready">{% icon "check" %}<div class="grow"><strong>Credit received: {{ dispute.amount_recovered|money:dispute.currency }}.</strong>
+    {% if dispute.outstanding %}{{ dispute.outstanding|money:dispute.currency }} of the disputed amount is still outstanding. {% endif %}Mark the dispute resolved once the credit is applied.</div></div>
+{% elif dispute.hold_released %}
+  <div class="decision">{% icon "info" %}<div class="grow"><strong>{{ dispute.shipment_reference }} was released for approval</strong> by {{ dispute.hold_released_by|display_name }} on {{ dispute.hold_released_at|date:"j M Y" }}: “{{ dispute.hold_release_note }}”. Waiting for the vendor's credit.</div></div>
+{% endif %}
+
+<div class="grid-side">
+  <div class="stack fluid">
+    <section class="card">
+      <div class="card-head"><div><h2>Issues raised</h2><p>What the vendor was told, with the amounts.</p></div>
+        <span class="num">{{ dispute.amount_disputed|money:dispute.currency }}</span></div>
+      {% for it in items %}
+      <div class="issue">
+        <span class="sev tag {% if it.issue and not it.issue.resolved %}warning{% else %}ok{% endif %}">{% if it.issue and not it.issue.resolved %}Open{% elif it.issue %}Resolved{% else %}Changed{% endif %}</span>
+        <div><h4>{{ it.title }}</h4><p>{{ it.explanation }}</p>
+          {% if it.data.quote %}<p class="guide">Vendor quote {{ it.data.quote }}</p>{% endif %}
+          {% if it.issue and it.issue.resolved %}<p class="guide">Resolved by {{ it.issue.resolved_by|display_name }}{% if it.issue.resolution_note %}: “{{ it.issue.resolution_note }}”{% endif %}</p>
+          {% elif not it.issue %}<p class="guide">The shipment no longer shows this issue (the value was corrected or the document moved).</p>{% endif %}
+        </div>
+        <div class="act num">{% if it.amount %}{{ it.amount|money:it.currency }}{% endif %}</div>
+      </div>
+      {% endfor %}
+    </section>
+
+    {% if dispute.sent_at or dispute.body %}
+    <section class="card">
+      <div class="card-head"><div><h2>{% if dispute.sent_at %}Email sent{% else %}Draft email{% endif %}</h2>
+        {% if dispute.sent_at %}<p>{{ dispute.sent_at|date:"j M Y, H:i" }} by {{ dispute.sent_by|display_name }}{% if dispute.ai_polished %}, worded with AI help{% endif %}</p>{% endif %}</div></div>
+      <div class="card-body">
+        <dl class="email-meta">
+          <div><dt>To</dt><dd>{{ dispute.vendor_email|default:"–" }}</dd></div>
+          {% if dispute.cc %}<div><dt>Copy</dt><dd>{{ dispute.cc }}</dd></div>{% endif %}
+          {% if sent_reply_to %}<div><dt>Replies to</dt><dd>{{ sent_reply_to|join:", " }}</dd></div>{% endif %}
+          <div><dt>Subject</dt><dd>{{ dispute.subject }}</dd></div>
+          {% if dispute.invoice %}<div><dt>Attached</dt><dd>{{ dispute.invoice.original_filename }}</dd></div>{% endif %}
+          {% if dispute.message_id %}<div><dt>Message ID</dt><dd class="mono small">{{ dispute.message_id }}</dd></div>{% endif %}
+        </dl>
+        <pre class="email-text">{{ dispute.body }}</pre>
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="card">
+      <div class="card-head"><div><h2>Timeline</h2><p>Everything that happened on this dispute, newest first.</p></div></div>
+      {% if events %}
+      <ol class="timeline">
+        {% for e in events %}
+        <li class="{% if e.kind == 'sent' or e.kind == 'credit' or e.kind == 'resolved' %}key{% endif %}">
+          <div><strong>{{ e.actor|display_name }}</strong> {{ e.verb }}</div>
+          <div class="when" title="{{ e.created_at|date:'j M Y, H:i:s' }}">{{ e.created_at|date:"j M Y, H:i" }}</div>
+          {% if e.text %}<div class="note">{{ e.text|linebreaksbr }}</div>{% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+      {% else %}<div class="card-body muted">Nothing yet.</div>{% endif %}
+    </section>
+  </div>
+
+  <div class="stack fluid">
+    {% if dispute.status == "draft" and can.edit %}
+    <section class="card"><div class="card-body"><a class="btn btn-primary" href="{% url 'disputes:edit' dispute.pk %}">Continue the draft</a></div></section>
+    {% endif %}
+
+    {% if dispute.status != "draft" and dispute.status != "resolved" and dispute.status != "closed" and can.edit %}
+    <section class="card">
+      <div class="card-head"><div><h2>Log the vendor's reply</h2></div></div>
+      <form class="card-body stack" style="gap:10px" method="post" action="{% url 'disputes:reply' dispute.pk %}">{% csrf_token %}
+        <div><label class="lbl" for="reply-text">What did they say?</label>
+          <textarea id="reply-text" name="text" required maxlength="4000" placeholder="Paste their email or summarize the call."></textarea></div>
+        {% if dispute.status == "sent" %}
+        <label class="check"><input type="checkbox" name="agreed"><span>They agreed to send a credit note or corrected invoice</span></label>
+        {% endif %}
+        {% if dispute.is_waiting %}
+        <div><label class="lbl" for="reply-follow">Next follow-up <span class="muted small">(optional)</span></label>
+          <input id="reply-follow" type="date" name="follow_up_on"></div>
+        {% endif %}
+        <div><button class="btn btn-sm btn-primary" type="submit">Log reply</button></div>
+      </form>
+    </section>
+    {% endif %}
+
+    {% if dispute.is_waiting or dispute.status == "credit_received" %}{% if can.approve %}
+    <section class="card">
+      <div class="card-head"><div><h2>{% if dispute.status == "credit_received" %}Update the credit{% else %}Record the credit{% endif %}</h2>
+        <p>When the credit note or corrected invoice arrives.</p></div></div>
+      <form class="card-body stack" style="gap:10px" method="post" action="{% url 'disputes:credit' dispute.pk %}">{% csrf_token %}
+        {% if suggested %}<div class="decision">{% icon "file" %}<div class="grow"><strong>{{ suggested.doc.original_filename }} looks like the credit for this dispute.</strong> It names the disputed invoice. Check the amount below against the document, then save.</div></div>{% endif %}
+        <div><label class="lbl" for="credit-amount">Total recovered ({{ dispute.currency }})</label>
+          <input id="credit-amount" type="text" inputmode="decimal" name="amount" required value="{% if suggested %}{{ suggested.amount }}{% elif dispute.amount_recovered %}{{ dispute.amount_recovered }}{% else %}{{ dispute.amount_disputed }}{% endif %}" size="14"></div>
+        <div><label class="lbl" for="credit-doc">Credit note or corrected invoice <span class="muted small">(optional)</span></label>
+          <select class="w-full" id="credit-doc" name="credit_note">
+            <option value="">No document yet</option>
+            {% for doc in candidates %}<option value="{{ doc.pk }}"{% if doc.pk == dispute.credit_note_id or doc.pk == suggested.doc.pk %} selected{% endif %}>{{ doc.original_filename|truncatechars:48 }} ({{ doc.get_doc_type_display|lower }}, {{ doc.received_at|date:"j M" }})</option>{% endfor %}
+          </select>
+          <p class="hint">Upload the vendor's credit note in Documents first to link it here.</p></div>
+        <div><label class="lbl" for="credit-note">Note <span class="muted small">(optional)</span></label>
+          <input class="w-full" id="credit-note" type="text" name="note" maxlength="500" placeholder="For example: credit note CN-2291 applied to the next statement"></div>
+        <label class="check"><input type="checkbox" name="confirm_over"><span>The credit is higher than the amount disputed, and I have checked it<span class="sub">Only needed when the amount above is more than {{ dispute.amount_disputed|money:dispute.currency }}.</span></span></label>
+        <label class="check"><input type="checkbox" name="settles" checked><span>This settles the dispute<span class="sub">Untick if the vendor still owes part of it.</span></span></label>
+        <div><button class="btn btn-sm btn-primary" type="submit">Save credit</button></div>
+        {% if not shipment_locked and dispute.shipment_id %}<p class="hint">Disputed issues still open on {{ dispute.shipment_reference }} are marked resolved, in your name.</p>{% endif %}
+      </form>
+    </section>
+    {% endif %}{% endif %}
+
+    {% if dispute.status == "credit_received" and can.approve %}
+    <section class="card">
+      <div class="card-head"><div><h2>Mark resolved</h2><p>The credit is applied and nothing more is expected.</p></div></div>
+      <form class="card-body stack" style="gap:10px" method="post" action="{% url 'disputes:resolve' dispute.pk %}">{% csrf_token %}
+        <label class="sr-only" for="resolve-note">Note</label>
+        <input class="w-full" id="resolve-note" type="text" name="note" maxlength="500" placeholder="Optional note">
+        <div><button class="btn btn-sm btn-primary" type="submit">{% icon "check" %} Mark resolved</button></div>
+      </form>
+    </section>
+    {% endif %}
+
+    {% if dispute.is_waiting and can.edit %}
+    <section class="card">
+      <div class="card-head"><div><h2>Follow-up date</h2><p>The team is alerted the day after it passes.</p></div></div>
+      <form class="card-body inline-form" method="post" action="{% url 'disputes:follow_up' dispute.pk %}">{% csrf_token %}
+        <label class="sr-only" for="follow-date">Follow up on</label>
+        <input id="follow-date" type="date" name="follow_up_on" value="{{ dispute.follow_up_on|date:'Y-m-d' }}" required>
+        <button class="btn btn-sm" type="submit">Save date</button>
+      </form>
+    </section>
+    {% endif %}
+
+    {% if can.edit %}
+    <section class="card">
+      <div class="card-head"><div><h2>Add a note</h2></div></div>
+      <form class="card-body stack" style="gap:10px" method="post" action="{% url 'disputes:note' dispute.pk %}">{% csrf_token %}
+        <label class="sr-only" for="note-text">Note</label>
+        <textarea id="note-text" name="text" required maxlength="4000" placeholder="For example: called their AR team, ticket 55120."></textarea>
+        <div><button class="btn btn-sm" type="submit">Add note</button></div>
+      </form>
+    </section>
+    {% endif %}
+
+    {% if dispute.is_waiting and can.approve %}
+    <section class="card">
+      <div class="card-body">
+        <details class="reveal" data-focus>
+          <summary class="btn btn-sm btn-danger">Close without recovery</summary>
+          <form class="pop-form" method="post" action="{% url 'disputes:close' dispute.pk %}">{% csrf_token %}
+            <p class="small">Use this when the vendor refuses or the amount isn't worth chasing. Disputed issues still open on the shipment are resolved with your reason.</p>
+            <label class="lbl" for="close-note">Reason, kept in the audit log</label>
+            <textarea id="close-note" name="note" minlength="{{ note_min }}" maxlength="500" required placeholder="For example: vendor showed the fuel surcharge was agreed in the contract."></textarea>
+            <div><button class="btn btn-sm btn-danger solid" type="submit">Close {{ dispute.reference }}</button></div>
+          </form>
+        </details>
+      </div>
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% load ui review_tags %}
+{% block title %}Documents{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Documents</h1>
+    <p class="lede">Every file received by upload, email or folder import. Documents not in a shipment need a person to place them.</p>
+  </div>
+  {% include "integrations/_export_menu.html" with kind="documents" %}
+</div>
+
+{% include "includes/upload.html" %}
+
+<nav class="tabs" aria-label="Document view" style="margin-top:18px">
+  {% for key, name, n in views %}
+  <a href="?{% if view_query %}{{ view_query }}&amp;{% endif %}view={{ key }}" class="{% if key == view %}on{% endif %}">{{ name }}<span class="n">{{ n }}</span></a>
+  {% endfor %}
+</nav>
+
+<form class="filters" method="get">
+  <input type="hidden" name="view" value="{{ view }}">
+  <label class="sr-only" for="q">Search documents</label>
+  <input id="q" type="search" name="q" value="{{ q }}" placeholder="File name, invoice number, vendor, B/L">
+  <label class="sr-only" for="type">Document type</label>
+  <select id="type" name="type" data-autosubmit>
+    <option value="">All types</option>
+    {% for key, name in types %}<option value="{{ key }}"{% if key == doc_type %} selected{% endif %}>{{ name }}</option>{% endfor %}
+  </select>
+  <button class="btn" type="submit">{% icon "search" %} Search</button>
+  {% if q or doc_type %}<a class="btn btn-quiet" href="?view={{ view }}">Clear</a>{% endif %}
+</form>
+
+<section class="card">
+  {% if page.object_list %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>File</th><th>Type</th><th>Status</th><th>Shipment</th><th>Source</th><th>Received</th></tr></thead>
+      <tbody>
+      {% for d in page %}
+        <tr>
+          <td><a class="row-link wrap" href="{% url 'review:document' d.pk %}">{{ d.original_filename }}</a>
+            {% if d.status == 'needs_ocr' %}<span class="sub">Scanned image: type the key fields, or ask an administrator to turn on scan reading</span>
+            {% elif d.status == 'error' %}<span class="sub">{{ d.error|doc_error|truncatechars:90 }}</span>
+            {% elif d.status == 'unmatched' %}<span class="sub">No B/L, container or PO number found</span>
+            {% elif d.status == 'received' %}<span class="sub">Being read now</span>{% endif %}
+            {% include "intake/_list_origin.html" %}
+          </td>
+          <td class="nowrap">{{ d.get_doc_type_display }}</td>
+          <td>{% if d.status == 'matched' %}<span class="badge ok">In shipment</span>
+            {% elif d.status == 'error' %}<span class="badge err">Couldn't read</span>
+            {% elif d.status == 'received' %}<span class="badge neutral">Processing</span>
+            {% elif d.is_container %}<span class="badge neutral">{{ d.get_status_display }}</span>
+            {% else %}<span class="badge warn">{{ d.get_status_display }}</span>{% endif %}</td>
+          <td>{% if d.match %}<a href="{% url 'review:shipment' d.match.shipment_id %}">{{ d.match.shipment.reference }}</a>{% else %}<span class="muted">–</span>{% endif %}</td>
+          <td class="nowrap">{{ d.get_source_display }}{% if d.email %}<span class="sub">{{ d.email.sender|truncatechars:32 }}</span>{% endif %}</td>
+          <td class="nowrap muted" title="{{ d.received_at|date:'j M Y, H:i' }}">{{ d.received_at|date:"j M, H:i" }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "includes/pager.html" %}
+  {% else %}
+  <div class="empty">{% icon "file" %}
+    {% if view == "attention" and not q %}<h3>Every document is in a shipment</h3><p class="muted">Nothing to place by hand.</p>
+    {% else %}<h3>No documents found</h3><p class="muted">Try another search or type.</p>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

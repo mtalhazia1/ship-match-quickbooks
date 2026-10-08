@@ -1,0 +1,10 @@
+<tr class="charge-row{% if cf.errors %} has-error{% endif %}">
+  <td>{% for h in cf.hidden_fields %}{{ h }}{% endfor %}
+    <label class="sr-only" for="{{ cf.code.id_for_label }}">Charge</label>{{ cf.code }}
+    {% if cf.code.errors %}<ul class="errorlist">{% for e in cf.code.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}</td>
+  <td><label class="sr-only" for="{{ cf.description.id_for_label }}">As the vendor writes it</label>{{ cf.description }}</td>
+  <td class="num"><label class="sr-only" for="{{ cf.amount.id_for_label }}">Amount</label>{{ cf.amount }}
+    {% if cf.amount.errors %}<ul class="errorlist">{% for e in cf.amount.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}</td>
+  <td><label class="sr-only" for="{{ cf.basis.id_for_label }}">Basis</label>{{ cf.basis }}</td>
+  <td>{% if cf.DELETE and cf.instance.pk %}<label class="check small remove">{{ cf.DELETE }}<span>Remove</span></label>{% endif %}</td>
+</tr>

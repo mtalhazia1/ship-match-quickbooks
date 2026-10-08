@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Team{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Team</h1>
+    <p class="lede">Who can work on {{ org.name }} and what they may do. Approval limits are in {{ org.home_currency }}.</p>
+  </div>
+  <details class="reveal popover" data-focus data-menu>
+    <summary class="btn btn-primary">{% icon "plus" %} Invite someone</summary>
+    <form class="pop-form" method="post" action="{% url 'core:invite' %}" style="min-width:min(420px,90vw)">{% csrf_token %}
+      <div><label class="lbl" for="inv-email">Work email</label><input class="w-full" id="inv-email" type="email" name="email" required></div>
+      <div><label class="lbl" for="inv-name">Full name</label><input class="w-full" id="inv-name" type="text" name="name"></div>
+      <div class="form-grid" style="grid-template-columns:1fr 1fr">
+        <div><label class="lbl" for="inv-role">Role</label>
+          <select class="w-full" id="inv-role" name="role">{% for key, name in roles %}<option value="{{ key }}"{% if key == "reviewer" %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></div>
+        <div><label class="lbl" for="inv-limit">Approval limit</label><input class="w-full" id="inv-limit" type="text" name="approval_limit" inputmode="decimal" placeholder="No limit"></div>
+      </div>
+      <p class="hint">They get an email with a link: to set a password if they are new, or to accept the invitation if they already use ShipMatch. The link works for 3 days (7 for an invitation).</p>
+      <div><button class="btn btn-primary" type="submit">Send invite</button></div>
+    </form>
+  </details>
+</div>
+
+{% if invite_link %}
+<section class="card" style="margin-bottom:16px">
+  <div class="card-body">
+    <p><strong>Link for {{ invite_link.email }}.</strong> If email isn't set up on this server, copy the link and send it yourself. It only works for that person.</p>
+    <div class="secret"><code id="invite-link">{{ invite_link.link }}</code><button class="btn btn-sm" type="button" data-copy="#invite-link">Copy link</button></div>
+  </div>
+</section>
+{% endif %}
+
+<section class="card">
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Person</th><th>Role</th><th>Approval limit</th><th>Two-factor</th><th>Last sign-in</th><th></th></tr></thead>
+      <tbody>
+      {% for m in members %}
+      <tr>
+        <td><strong>{{ m.user|display_name }}</strong>{% if m.user_id == user.pk %} <span class="muted small">(you)</span>{% endif %}
+          <span class="sub">{{ m.user.email|default:m.user.get_username }}{% if not m.user.is_active %}, deactivated{% endif %}{% if not m.user.has_usable_password %}, invite not accepted{% endif %}</span></td>
+        <td colspan="2">
+          <form class="inline-form" method="post" action="{% url 'core:update_member' m.pk %}">{% csrf_token %}
+            <label class="sr-only" for="role-{{ m.pk }}">Role</label>
+            <select id="role-{{ m.pk }}" name="role"{% if m.user_id == user.pk %} disabled title="You can't change your own role"{% endif %}>
+              {% for key, name in roles %}<option value="{{ key }}"{% if key == m.role %} selected{% endif %}>{{ name }}</option>{% endfor %}
+            </select>
+            {% if m.user_id == user.pk %}<input type="hidden" name="role" value="{{ m.role }}">{% endif %}
+            <label class="sr-only" for="limit-{{ m.pk }}">Approval limit</label>
+            <input id="limit-{{ m.pk }}" type="text" name="approval_limit" inputmode="decimal" value="{{ m.approval_limit|default_if_none:'' }}" placeholder="No limit" size="11">
+            <button class="btn btn-sm" type="submit">Save</button>
+          </form>
+        </td>
+        <td>{% if m.user.profile.mfa_enabled %}<span class="badge ok">On</span>{% else %}<span class="badge neutral">Off</span>{% endif %}</td>
+        <td class="nowrap muted">{% if m.shared %}<span title="This person also works in other organizations">n/a</span>{% elif m.user.last_login %}{{ m.user.last_login|date:"j M Y, H:i" }}{% else %}Never{% endif %}</td>
+        <td class="nowrap">
+          {% if m.user_id != user.pk %}
+          <details class="reveal popover" data-menu>
+            <summary class="btn btn-sm btn-quiet">More</summary>
+            <div class="pop-form">
+              {% if m.shared %}<p class="hint" style="margin:0 0 8px">Also belongs to other organizations. Only they can reset their password or two-factor.</p>{% else %}
+              <form method="post" action="{% url 'core:password_link' m.pk %}">{% csrf_token %}<button class="btn btn-sm w-full" type="submit">{% icon "link" %} Send password link</button></form>
+              {% if m.user.profile.mfa_enabled %}<form method="post" action="{% url 'core:reset_member_mfa' m.pk %}">{% csrf_token %}<button class="btn btn-sm w-full" type="submit">{% icon "refresh" %} Reset two-factor</button></form>{% endif %}{% endif %}
+              <form method="post" action="{% url 'core:remove_member' m.pk %}">{% csrf_token %}<button class="btn btn-sm btn-danger w-full" type="submit">{% icon "x" %} Remove from {{ org.name|truncatechars:24 }}</button></form>
+            </div>
+          </details>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" style="margin-top:16px">
+  <div class="card-head"><h2>What each role can do</h2></div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th></th><th>Viewer</th><th>Reviewer</th><th>Approver</th><th>Admin</th></tr></thead>
+      <tbody>
+        <tr><td>See shipments, documents and the dashboard</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td>Upload, correct values, move documents, accept warnings</td><td></td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td>Override errors, approve, reject, post to accounting</td><td></td><td></td><td>Yes</td><td>Yes</td></tr>
+        <tr><td>View and export the audit log</td><td></td><td></td><td>Yes</td><td>Yes</td></tr>
+        <tr><td>Manage team, settings, QuickBooks and API keys</td><td></td><td></td><td></td><td>Yes</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card-body small muted">With the maker-checker rule on, a person who edited a shipment can't also approve it. Approval limits apply to the shipment's payable total.</div>
+</section>
+{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}{% if channel %}Edit {{ channel.name }}{% else %}Add an alert channel{% endif %}{% endblock %}
+{% block content %}
+{% include "settings/_nav.html" %}
+<div class="grid-side">
+  <form method="post" class="card" action="">{% csrf_token %}
+    <div class="card-head"><div><h2>{% if channel %}Edit {{ channel.name }}{% else %}Add an alert channel{% endif %}</h2>
+      <p>{% if kind == "slack" %}Posts to one Slack channel through an incoming webhook.{% elif kind == "teams" %}Posts to a Teams channel or chat through a Power Automate workflow.{% else %}Sends an HTML email to the addresses below.{% endif %}</p></div></div>
+    <div class="card-body stack">
+      {% if channel %}<input type="hidden" name="kind" value="{{ channel.kind }}">
+      {% else %}
+      <fieldset class="plain-fieldset">
+        <legend class="lbl">Where should alerts go?</legend>
+        <div class="actions">
+          {% for key, name in kinds %}<a class="btn btn-sm{% if key == kind %} btn-primary{% endif %}" href="?kind={{ key }}"{% if key == kind %} aria-current="true"{% endif %}>{{ name }}</a>{% endfor %}
+        </div>
+        <input type="hidden" name="kind" value="{{ kind }}">
+      </fieldset>
+      {% endif %}
+
+      <div><label class="lbl" for="name">Name</label>
+        <input class="w-full" id="name" type="text" name="name" maxlength="100" required value="{{ initial.name }}" placeholder="{% if kind == 'email' %}Finance managers{% else %}AP team channel{% endif %}"></div>
+
+      {% if kind == "email" %}
+      <div><label class="lbl" for="email_recipients">Email addresses</label>
+        <textarea id="email_recipients" name="email_recipients" rows="3" placeholder="controller@yourcompany.com, ap@yourcompany.com">{{ initial.email_recipients }}</textarea>
+        <p class="hint">Separate addresses with commas. Up to 20.</p></div>
+      {% else %}
+      <div><label class="lbl" for="webhook_url">Webhook address</label>
+        <input class="w-full mono{% if url_error %} invalid{% endif %}" id="webhook_url" type="url" name="webhook_url" autocomplete="off" spellcheck="false" {% if not channel %}required{% endif %}
+          placeholder="{% if kind == 'slack' %}https://hooks.slack.com/services/T000/B000/XXXX{% else %}https://prod-00.westus.logic.azure.com:443/workflows/...{% endif %}"{% if url_error %} aria-invalid="true"{% endif %}>
+        <p class="hint">{% if channel %}Saved and encrypted ({{ channel.destination }}). Leave empty to keep it.{% endif %}
+          {% if kind == "slack" %}In Slack: Apps, Incoming Webhooks, Add New Webhook to Workspace, choose the channel, copy the address.
+          {% else %}In Teams: on the channel, Workflows, “Post to a channel when a webhook request is received”, copy the address.{% endif %}
+          Only {% if kind == "slack" %}hooks.slack.com{% else %}Teams and Power Automate{% endif %} addresses are accepted.</p></div>
+      {% endif %}
+
+      <fieldset class="plain-fieldset">
+        <legend class="lbl">Alerts for this channel</legend>
+        <div class="stack" style="gap:8px">
+          {% for key, label, help in event_list %}
+          <label class="check"><input type="checkbox" name="events" value="{{ key }}"{% if key in chosen %} checked{% endif %}>
+            <span><strong>{{ label }}</strong><span class="sub">{{ help }}</span></span></label>
+          {% endfor %}
+        </div>
+      </fieldset>
+
+      <label class="check"><input type="checkbox" name="enabled"{% if initial.enabled %} checked{% endif %}>
+        <span><strong>On</strong><span class="sub">Turn off to pause alerts without losing the settings.</span></span></label>
+
+      <div class="actions"><button class="btn btn-primary" type="submit">Save channel</button>
+        <a class="btn btn-quiet" href="{% url 'notifications:settings' %}">Cancel</a></div>
+    </div>
+  </form>
+  <section class="card">
+    <div class="card-head"><h2>Good to know</h2></div>
+    <div class="card-body small stack" style="gap:8px">
+      <p>Webhook addresses are stored encrypted and never shown in full or written to the audit log.</p>
+      <p>If {% if kind == "email" %}the mail server{% else %}{% if kind == "slack" %}Slack{% else %}Teams{% endif %}{% endif %} is busy or down, ShipMatch tries again a few times over the next minutes. Every attempt is listed under Recent messages.</p>
+      <p class="muted">A failing alert never stops the work that triggered it.</p>
+    </div>
+  </section>
+</div>
+{% endblock %}

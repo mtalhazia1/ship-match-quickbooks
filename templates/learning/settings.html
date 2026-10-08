@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Vendor learning{% endblock %}
+{% block content %}
+{% include "settings/_nav.html" %}
+<section class="card learning-settings">
+  <div class="card-head"><div><h2>Vendor learning</h2>
+    <p>When a reviewer corrects a value, ShipMatch remembers how that vendor prints it: the label in front of it and whether dates are written day first. The vendor's next documents are read with what it learned.</p></div></div>
+  {% if profiles %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Vendor</th><th>What it learned</th><th>Latest corrections</th><th class="num">Corrections</th><th class="num">Documents helped</th><th><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>
+      {% for p in profiles %}
+        <tr id="vendor-{{ p.pk }}">
+          <td><strong>{{ p.display_name }}</strong><span class="sub">{{ p.get_doc_type_display }}</span>
+            <span class="sub">Last learned {{ p.last_learned_at|date:"j M Y, H:i"|default:"never" }}</span></td>
+          <td>{% if p.facts %}<ul class="learned-list">{% for f in p.facts %}<li>{{ f }}</li>{% endfor %}</ul>
+            {% else %}<span class="muted">No labels or date order yet. Corrected values weren't printed in the document.</span>{% endif %}</td>
+          <td>{% if p.recent %}<ul class="learned-list">{% for r in p.recent %}<li><span class="lf-name">{{ r.field }}</span> {% if r.old and r.new %}read “{{ r.old }}”, corrected to “{{ r.new }}”{% elif r.new %}was missing; a reviewer typed “{{ r.new }}”{% else %}“{{ r.old }}” was removed by a reviewer{% endif %}</li>{% endfor %}</ul>{% endif %}</td>
+          <td class="num">{{ p.correction_count }}</td>
+          <td class="num">{{ p.helped }}</td>
+          <td>
+            <details class="reveal popover" data-menu>
+              <summary class="btn btn-sm btn-danger">Forget</summary>
+              <form class="pop-form" method="post" action="{% url 'learning:forget' p.pk %}">{% csrf_token %}
+                <p class="small">ShipMatch forgets the labels, date order and corrections for {{ p.display_name }}. Values already saved on documents don't change. This is recorded in the audit log.</p>
+                <button class="btn btn-sm btn-danger solid" type="submit">Forget this vendor</button>
+              </form>
+            </details>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">{% icon "refresh" %}<h3>Nothing learned yet</h3>
+    <p class="muted">Correct a value on a document, for example an invoice number the reader missed. If the value is printed in the document, ShipMatch learns where this vendor puts it and reads it next time.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

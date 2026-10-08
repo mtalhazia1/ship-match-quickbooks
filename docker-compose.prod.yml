@@ -1,0 +1,72 @@
+# Production overrides: gunicorn instead of runserver, HTTPS via Caddy, no source mount.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Needs in .env: DJANGO_SECRET_KEY, FIELD_ENCRYPTION_KEY, DOMAIN, POSTGRES_PASSWORD (and the provider keys).
+# Needs Docker Compose 2.24 or newer: "!reset" and "!override" replace the development ports and the
+# source mount from docker-compose.yml (a plain list would be merged with them, publishing Postgres
+# and Redis on the internet past the firewall). Single-server guide: deploy/digitalocean.md
+x-prod-env: &prod-env
+  DJANGO_DEBUG: "0"
+  DJANGO_ALLOWED_HOSTS: "${DOMAIN:-localhost},web,localhost,127.0.0.1"
+  DATABASE_URL: "postgres://shipmatch:${POSTGRES_PASSWORD:-shipmatch}@db:5432/shipmatch"
+  DJANGO_CSRF_TRUSTED_ORIGINS: "https://${DOMAIN:-localhost}"
+  QBO_REDIRECT_URI: "https://${DOMAIN:-localhost}/accounting/qbo/callback"
+  XERO_REDIRECT_URI: "https://${DOMAIN:-localhost}/accounting/xero/callback"
+  TRUST_X_FORWARDED_FOR: "1"   # Caddy is the only way in
+  LOG_FORMAT: json
+
+services:
+  web:
+    user: app
+    command: sh -c "python manage.py migrate && python manage.py collectstatic --no-input && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120 --access-logfile -"
+    volumes: !override
+      - media:/app/media   # uploaded PDFs survive rebuilds (or set S3_BUCKET to use S3/MinIO)
+    ports: !reset []
+    restart: unless-stopped
+    environment: *prod-env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  worker:
+    user: app
+    volumes: !override
+      - media:/app/media
+    environment: *prod-env
+    restart: unless-stopped
+
+  beat:
+    user: app
+    volumes: !reset []
+    environment: *prod-env
+    restart: unless-stopped
+
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shipmatch}   # used when the database is first created
+    ports: !reset []
+    restart: unless-stopped
+
+  redis:
+    ports: !reset []
+    restart: unless-stopped
+
+  minio:
+    ports: !reset []
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    depends_on: [web]
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+    restart: unless-stopped
+
+volumes:
+  caddydata:
+  media:

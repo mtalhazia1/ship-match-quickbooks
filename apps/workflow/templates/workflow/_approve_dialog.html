@@ -1,0 +1,31 @@
+{% load ui %}{% url 'review:approve' shipment.pk as default_action %}
+<dialog id="wf-approve-dialog" class="wf-dialog" aria-labelledby="wf-approve-title">
+  <div class="wf-dialog-head">
+    <h2 id="wf-approve-title">{% if blockers %}{{ shipment.reference }} can't be approved yet{% else %}Approve {{ shipment.reference }}?{% endif %}</h2>
+    <button class="btn btn-quiet btn-sm" type="button" data-wf-close aria-label="Close">{% icon "x" %}</button>
+  </div>
+  <div class="wf-dialog-body">
+    {% if blockers %}
+      <p>Fix these first, then press <kbd class="wf-kbd">a</kbd> again:</p>
+      <ul class="wf-reasons">{% for b in blockers %}<li>{{ b }}</li>{% endfor %}</ul>
+    {% else %}
+      <dl class="kv">
+        <dt>Payable total</dt><dd>{% for cur, amount in totals.by_currency.items %}{{ amount|money:cur }}{% if not forloop.last %}, {% endif %}{% empty %}–{% endfor %}</dd>
+        {% if totals.home is not None and totals.by_currency|length > 1 %}<dt>In {{ shipment.organization.home_currency }}</dt><dd>{{ totals.home|money:shipment.organization.home_currency }}</dd>{% endif %}
+        <dt>Open warnings</dt><dd>{% with n=open_issues|length %}{{ n|default:"None" }}{% endwith %}</dd>
+      </dl>
+      <p class="small muted">Approving locks the shipment and makes its bills ready to post.</p>
+    {% endif %}
+  </div>
+  {% if not blockers %}
+  <form class="wf-dialog-foot" method="post" action="{{ action_url|default:default_action }}">{% csrf_token %}
+    {% if via_link %}<input type="hidden" name="via" value="link">{% endif %}
+    <label class="sr-only" for="wf-approve-note">Note for the audit log (optional)</label>
+    <input id="wf-approve-note" class="wf-grow" type="text" name="note" maxlength="500" placeholder="Note for the audit log (optional)" autocomplete="off">
+    <button class="btn btn-quiet" type="button" data-wf-close>Cancel</button>
+    <button class="btn btn-primary" type="submit" data-wf-autofocus>{% icon "check" %} Approve</button>
+  </form>
+  {% else %}
+  <div class="wf-dialog-foot"><button class="btn" type="button" data-wf-close>Close</button></div>
+  {% endif %}
+</dialog>

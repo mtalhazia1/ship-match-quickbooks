@@ -1,0 +1,25 @@
+{% extends "base_auth.html" %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<h1>Sign in</h1>
+<p class="lede">Use the username and password your administrator gave you.</p>
+<form method="post" novalidate>
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ next }}">
+  {% if form.non_field_errors %}
+  <ul class="flash"><li class="error">{% for e in form.non_field_errors %}{{ e }} {% endfor %}</li></ul>
+  {% endif %}
+  <div class="form-row">
+    <label class="lbl" for="id_username">Username or email</label>
+    <input type="text" name="username" id="id_username" value="{{ form.username.value|default:'' }}" autocomplete="username" autocapitalize="none" autofocus required>
+  </div>
+  <div class="form-row">
+    <label class="lbl" for="id_password">Password</label>
+    <input type="password" name="password" id="id_password" autocomplete="current-password" required>
+  </div>
+  <button class="btn btn-primary" type="submit">Sign in</button>
+</form>
+{% include "demo/_login_accounts.html" %}
+<p class="auth-foot"><a href="{% url 'accounts:password_reset' %}">Forgot your password?</a></p>
+{% include "billing/_signup_link.html" %}
+{% endblock %}

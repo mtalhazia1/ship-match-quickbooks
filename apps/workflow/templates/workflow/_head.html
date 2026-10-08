@@ -1,0 +1,2 @@
+{% load static workflow_tags %}{% if user.is_authenticated %}{% wf_prefs as wfp %}<meta name="wf-shortcuts" content="{% if wfp.shortcuts %}on{% else %}off{% endif %}">
+  <script src="{% static 'js/workflow.js' %}" defer></script>{% endif %}

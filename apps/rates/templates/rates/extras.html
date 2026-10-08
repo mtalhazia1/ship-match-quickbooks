@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Approved extra charges{% endblock %}
+{% block content %}
+{% include "rates/_head.html" %}
+<p class="muted small" style="max-width:80ch;margin:-4px 0 14px">Extra charges a vendor may bill without asking first, with free time and caps. Any other detention, demurrage, storage, waiting time, exam fee or surcharge on an invoice is flagged, unless the quote itself lists it.</p>
+
+{% if vendors|length > 1 %}
+<form class="filters" method="get">
+  <label class="sr-only" for="vendor">Vendor</label>
+  <select id="vendor" name="vendor" data-autosubmit>
+    <option value="">All vendors</option>
+    {% for key, name in vendors %}<option value="{{ key }}"{% if vendor == key %} selected{% endif %}>{{ name }}</option>{% endfor %}
+  </select>
+  <noscript><button class="btn" type="submit">Show</button></noscript>
+</form>
+{% endif %}
+
+{% for g in groups %}
+<section class="card">
+  <div class="card-head"><h2>{{ g.name }}</h2>
+    {% if can_edit %}<a class="btn btn-sm" href="{% url 'rates:extra_create' %}?vendor={{ g.name|urlencode }}">{% icon "plus" %} Add</a>{% endif %}</div>
+  <div class="table-wrap">
+    <table class="data extras-table">
+      <colgroup><col style="width:20%"><col style="width:36%"><col style="width:14%"><col><col style="width:150px"></colgroup>
+      <thead><tr><th>Extra charge</th><th>Allowed</th><th>Valid</th><th>Notes</th>{% if can_edit %}<th><span class="sr-only">Actions</span></th>{% endif %}</tr></thead>
+      <tbody>
+      {% for a in g.rows %}
+      <tr>
+        <td><strong>{{ a.code_label }}</strong><span class="sub">{{ a.get_unit_display }}</span></td>
+        <td>{{ a.terms|capfirst }}</td>
+        <td class="nowrap">{% if a.valid_from or a.valid_to %}{{ a.valid_from|date:"j M Y"|default:"Any time" }}<span class="sub">{% if a.valid_to %}to {{ a.valid_to|date:"j M Y" }}{% if a.valid_to < today %} (ended){% endif %}{% else %}No end date{% endif %}</span>{% else %}Any time{% endif %}</td>
+        <td class="small muted">{{ a.notes|default:"–" }}</td>
+        {% if can_edit %}<td class="nowrap"><div class="actions">
+          <a class="btn btn-sm" href="{% url 'rates:extra_edit' a.pk %}">Edit</a>
+          <details class="reveal popover" data-menu><summary class="btn btn-sm btn-danger">Remove</summary>
+            <form class="pop-form" method="post" action="{% url 'rates:extra_delete' a.pk %}">{% csrf_token %}
+              <p class="small">{{ a.code_label }} from {{ g.name }} will be flagged again on open shipments.</p>
+              <button class="btn btn-sm btn-danger solid" type="submit">Remove approval</button>
+            </form></details></div></td>{% endif %}
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% empty %}
+<section class="card"><div class="empty">{% icon "check" %}<h3>No approved extra charges</h3>
+  <p class="muted">Approve the extras each vendor may bill, for example detention after 4 free days at up to 100.00 a day. Until then, every extra charge from a vendor with quotes on file is flagged.</p>
+  {% if can_edit %}<a class="btn btn-primary" href="{% url 'rates:extra_create' %}" style="margin-top:10px">{% icon "plus" %} Approve an extra charge</a>{% endif %}</div></section>
+{% endfor %}
+{% endblock %}

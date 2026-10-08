@@ -1,0 +1,20 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>This page has expired – ShipMatch</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+<main class="content">
+  <div class="error-page">
+    <div class="code">Page expired</div>
+    <h1>This page has expired</h1>
+    <p>You've had it open for a while, or you signed out in another window, so ShipMatch can't be sure the request is yours. Nothing was changed.</p>
+    <p>Reload the page, sign in again if you're asked to, and repeat what you were doing.</p>
+    <a class="btn btn-primary" href="{{ back }}">Go back and reload</a>
+  </div>
+</main>
+</body>
+</html>

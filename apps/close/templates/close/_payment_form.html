@@ -1,0 +1,26 @@
+{% load ui %}<details class="popover close-pay" data-focus>
+  <summary class="btn btn-sm">{% icon "plus" %} Record a payment</summary>
+  <form class="pop-form" method="post" action="{% url 'close:payment_add' %}">{% csrf_token %}
+    {% if st %}<input type="hidden" name="statement" value="{{ st.pk }}">{% endif %}
+    <label class="lbl" for="pay-vendor">Vendor</label>
+    {% if st and st.vendor_name %}
+      <input id="pay-vendor" type="text" name="vendor" value="{{ st.vendor_name }}" readonly>
+    {% else %}
+      <select id="pay-vendor" name="vendor" required>
+        <option value="">Choose</option>
+        {% for k, name in vendors %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+      </select>
+    {% endif %}
+    <div class="close-pay-grid">
+      <div><label class="lbl" for="pay-date">Paid on</label><input id="pay-date" type="date" name="paid_on" value="{{ today|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}" required></div>
+      <div><label class="lbl" for="pay-amount">Amount</label><input id="pay-amount" type="text" name="amount" inputmode="decimal" required placeholder="2535.00"></div>
+      <div><label class="lbl" for="pay-cur">Currency</label><input id="pay-cur" type="text" name="currency" value="{% if st and st.currency %}{{ st.currency }}{% else %}{{ org.home_currency }}{% endif %}" maxlength="3" size="4" required></div>
+    </div>
+    <label class="lbl" for="pay-ref">Payment reference</label>
+    <input id="pay-ref" type="text" name="reference" maxlength="100" placeholder="Wire or check number">
+    <label class="lbl" for="pay-inv">Invoices it paid</label>
+    <input id="pay-inv" type="text" name="invoices" maxlength="500" placeholder="HA-123456, HA-123789">
+    <p class="hint">Separate invoice numbers with commas. Linking them tells ShipMatch those invoices are paid.</p>
+    <button class="btn btn-primary btn-sm" type="submit">Record payment</button>
+  </form>
+</details>

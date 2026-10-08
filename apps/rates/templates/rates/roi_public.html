@@ -1,0 +1,5 @@
+{% extends "demo/public_base.html" %}
+{% load static %}
+{% block title %}ROI calculator{% endblock %}
+{% block head %}<script src="{% static 'js/roi.js' %}" defer></script>{% endblock %}
+{% block content %}{% include "rates/_roi.html" %}{% endblock %}

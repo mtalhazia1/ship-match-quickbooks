@@ -1,0 +1,35 @@
+{% load ui workflow_tags %}<article class="wf-comment{% if c.is_deleted %} deleted{% endif %}" id="comment-{{ c.pk }}">
+  <span class="wf-avatar" aria-hidden="true">{% if c.author %}{{ c.author|initials }}{% else %}?{% endif %}</span>
+  <div class="wf-comment-main">
+    <div class="wf-comment-head">
+      <strong>{{ c.author|display_name }}</strong>
+      {% if top and c.document_id and not doc %}<span class="wf-about">on {{ c.document.get_doc_type_display|lower }} <a href="#doc-{{ c.document_id }}">{{ c.document.original_filename|truncatechars:48 }}</a></span>{% endif %}
+      <time datetime="{{ c.created_at|date:'c' }}" title="{{ c.created_at|date:'j M Y, H:i' }}">{{ c.created_at|timesince }} ago</time>
+      {% if c.edited_at and not c.is_deleted %}<span class="muted small" title="Edited {{ c.edited_at|date:'j M Y, H:i' }}">(edited)</span>{% endif %}
+    </div>
+    {% if c.is_deleted %}<p class="muted small">{{ c.author|display_name }} deleted this comment.</p>
+    {% else %}<div class="wf-comment-body">{{ html }}</div>{% endif %}
+    {% if c|wf_can_change:user %}
+    <div class="wf-comment-tools">
+      <details class="reveal" data-focus>
+        <summary class="link-btn small">Edit</summary>
+        <form class="wf-comment-form" method="post" action="{% url 'workflow:comment_edit' c.pk %}">{% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <label class="sr-only" for="wf-edit-{{ c.pk }}">Edit your comment</label>
+          <textarea id="wf-edit-{{ c.pk }}" name="body" rows="3" maxlength="4000" required data-wf-mentions="{% url 'workflow:members' %}?for={{ c.organization_id }}">{{ c.body }}</textarea>
+          <div><button class="btn btn-sm btn-primary" type="submit">Save</button></div>
+        </form>
+      </details>
+      <details class="reveal">
+        <summary class="link-btn small">Delete</summary>
+        <form class="wf-confirm-inline" method="post" action="{% url 'workflow:comment_delete' c.pk %}">{% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <span class="small">Delete this comment? This is recorded in the audit log.</span>
+          <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+        </form>
+      </details>
+      <span class="small muted">{{ c|wf_minutes_left }} min left to change</span>
+    </div>
+    {% endif %}
+  </div>
+</article>

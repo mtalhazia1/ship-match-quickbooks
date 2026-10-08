@@ -1,0 +1,11 @@
+<div class="page-head">
+  <div>
+    <h1>Month-end</h1>
+    <p class="lede">What {{ org.name }} owes for freight that isn't in the books yet, and whether vendors' statements agree with ShipMatch.</p>
+  </div>
+</div>
+<nav class="tabs" aria-label="Month-end sections">
+  <a href="{% url 'close:accruals' %}" class="{% if tab == 'accruals' %}on{% endif %}"{% if tab == 'accruals' %} aria-current="page"{% endif %}>Accruals</a>
+  <a href="{% url 'close:statements' %}" class="{% if tab == 'statements' %}on{% endif %}"{% if tab == 'statements' %} aria-current="page"{% endif %}>Vendor statements</a>
+  {% if can.manage %}<a href="{% url 'close:settings' %}">Settings</a>{% endif %}
+</nav>

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Dispute emails{% endblock %}
+{% block content %}
+{% include "settings/_nav.html" %}
+<div class="grid-side">
+  <form method="post" class="card">{% csrf_token %}
+    <div class="card-head"><div><h2>Dispute emails</h2><p>How emails asking vendors for credit notes are sent. Approvers send them from a shipment's disputes.</p></div></div>
+    <div class="card-body stack">
+      <div class="form-grid">
+        <div><label class="lbl" for="reply_to">Reply-to address</label>
+          <input class="w-full" id="reply_to" type="email" name="reply_to" value="{{ obj.reply_to }}" placeholder="ap@yourcompany.com">
+          <p class="hint">Your accounts payable mailbox. Vendor replies go here. Empty uses the address of the approver who sends.</p></div>
+        <div><label class="lbl" for="follow_up_days">Follow up after</label>
+          <input id="follow_up_days" type="number" name="follow_up_days" min="1" max="90" value="{{ obj.follow_up_days }}" required> <span class="muted">days</span>
+          <p class="hint">A dispute without an answer by then is flagged to the team.</p></div>
+      </div>
+      <label class="check"><input type="checkbox" name="copy_reply_to"{% if obj.copy_reply_to %} checked{% endif %}>
+        <span><strong>Send a copy to the reply-to address</strong><span class="sub">Keeps the full thread in your mailbox, so replies arrive in the same conversation.</span></span></label>
+      <div><label class="lbl" for="signature">Signature</label>
+        <textarea id="signature" name="signature" rows="5" maxlength="1000" placeholder="Accounts payable&#10;{{ org.name }}&#10;+1 555 0100">{{ obj.signature }}</textarea>
+        <p class="hint">Closing lines of every dispute email. Empty uses “Accounts payable” and the organization name.</p></div>
+      <div><button class="btn btn-primary" type="submit">Save settings</button></div>
+    </div>
+  </form>
+  <section class="card">
+    <div class="card-head"><h2>Who does what</h2></div>
+    <div class="card-body small stack" style="gap:8px">
+      <p><strong>Reviewers</strong> draft disputes, log vendor replies, add notes and change follow-up dates.</p>
+      <p><strong>Approvers</strong> send disputes, record credits, resolve or close them, and can approve a shipment without waiting for the vendor.</p>
+      <p class="muted">While a sent dispute waits for the vendor, its shipment can't be approved. Every step is kept in the audit log.</p>
+    </div>
+  </section>
+</div>
+{% endblock %}

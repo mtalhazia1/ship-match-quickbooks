@@ -1,0 +1,18 @@
+# Never bake secrets, local data or private documents into the image.
+.env
+secrets/
+real_docs/
+db.sqlite3
+media/
+staticfiles/
+eval_reports/
+datasets/
+.venv/
+.git/
+.github/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+dump.rdb
+.deploy

@@ -1,0 +1,19 @@
+{# Settings > Accounting: values to copy into the Intuit and Xero developer portals. #}
+<section class="card">
+  <div class="card-head"><div><h2>App settings for developers</h2><p>Copy these into your apps at developer.intuit.com and developer.xero.com.</p></div></div>
+  <div class="card-body xero-app">
+    <h3>QuickBooks (Intuit)</h3>
+    <p class="lbl">Redirect URI</p>
+    <div class="secret"><code id="redirect-uri">{{ redirect_uri }}</code><button class="btn btn-sm" type="button" data-copy="#redirect-uri">Copy</button></div>
+    <p class="lbl" style="margin-top:12px">Reconnect URL</p>
+    <div class="secret"><code id="reconnect-url">{{ reconnect_url }}</code><button class="btn btn-sm" type="button" data-copy="#reconnect-url">Copy</button></div>
+    <p class="hint">Intuit requires a reconnect URL for production apps; it sends customers there when their connection is about to expire. Production apps need HTTPS addresses.</p>
+
+    <h3 style="margin-top:20px">Xero</h3>
+    <p class="lbl">Redirect URI</p>
+    <div class="secret"><code id="xero-redirect-uri">{{ xero_redirect_uri }}</code><button class="btn btn-sm" type="button" data-copy="#xero-redirect-uri">Copy</button></div>
+    <p class="lbl" style="margin-top:12px">Scopes ShipMatch asks for</p>
+    <div class="secret"><code id="xero-scopes">{{ xero_scopes }}</code><button class="btn btn-sm" type="button" data-copy="#xero-scopes">Copy</button></div>
+    <p class="hint">{% if xero_pkce %}No client secret is set, so ShipMatch signs in as a PKCE app: choose "Mobile or desktop app" (PKCE) when creating the Xero app.{% else %}A client secret is set, so the Xero app must be a "Web app".{% endif %} Apps created from 2 March 2026 must use the newer granular scopes; set <code>XERO_SCOPES</code> as the README's Xero section shows.</p>
+  </div>
+</section>

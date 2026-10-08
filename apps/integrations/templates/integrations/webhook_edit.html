@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Webhook to {{ ep.host }}{% endblock %}
+{% block content %}
+{% include "settings/_nav.html" %}
+<div class="crumbs"><a href="{% url 'integrations:webhooks' %}">Webhooks</a> {% icon "chevron-right" %} <span>{{ ep.host }}</span></div>
+
+{% if new_secret %}
+<section class="card pf-secret-card">
+  <div class="card-body">
+    <p><strong>Copy the signing secret now.</strong> It is stored encrypted and won't be shown again. Put it in the receiving system to check the <code>ShipMatch-Signature</code> header.</p>
+    <div class="secret"><code id="wh-secret">{{ new_secret }}</code><button class="btn btn-sm" type="button" data-copy="#wh-secret">Copy secret</button></div>
+  </div>
+</section>
+{% endif %}
+
+{% if not ep.enabled %}
+<div class="pf-banner pf-banner-error" role="status">{% icon "alert-circle" %}<span class="pf-banner-text">This endpoint is off{% if ep.disabled_reason %}: {{ ep.disabled_reason }}{% else %}.{% endif %} Nothing is sent to it. Fix the receiving system, tick "Send events" below and save, then replay what it missed.</span></div>
+{% endif %}
+
+<div class="grid-side pf-webhooks">
+  <div class="stack fluid">
+    <section class="card">
+      <div class="card-head"><div><h2>Endpoint</h2><p>Added {{ ep.created_at|date:"j M Y" }}{% if ep.created_by %} by {{ ep.created_by.get_full_name|default:ep.created_by.get_username }}{% endif %}.</p></div>
+        <form method="post" action="{% url 'integrations:webhook_test' ep.pk %}">{% csrf_token %}
+          <button class="btn" type="submit"{% if not allowed %} disabled{% endif %}>{% icon "send" %} Send test event</button></form>
+      </div>
+      <form method="post" class="card-body stack">{% csrf_token %}
+        <div class="form-grid">
+          <div><label class="lbl" for="wh-url">Address</label>
+            <input class="w-full mono" id="wh-url" type="text" name="url" value="{{ ep.url }}" maxlength="2000" autocomplete="off" inputmode="url" required></div>
+          <div><label class="lbl" for="wh-desc">Description</label>
+            <input class="w-full" id="wh-desc" type="text" name="description" value="{{ ep.description }}" maxlength="200"></div>
+        </div>
+        {% include "integrations/_event_choices.html" with chosen=ep.events %}
+        <label class="check"><input type="checkbox" name="enabled"{% if ep.enabled %} checked{% endif %}>
+          <span><strong>Send events</strong><span class="sub">Untick to pause this endpoint. Events that happen while it is off are not sent later.</span></span></label>
+        <div class="actions"><button class="btn btn-primary" type="submit">Save endpoint</button></div>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Deliveries</h2><p>The last 50 to this endpoint. A replay sends the same event, with the same id, again.</p></div></div>
+      {% if deliveries %}
+      <div class="table-wrap">
+        <table class="data pf-deliveries">
+          <thead><tr><th>Time</th><th>Event</th><th>Result</th><th class="num">Tries</th><th></th></tr></thead>
+          <tbody>
+          {% for d in deliveries %}
+          <tr class="pf-delivery-row">
+            <td class="nowrap">{{ d.created_at|date:"j M, H:i:s" }}</td>
+            <td><span class="mono small">{{ d.event.type }}</span>{% if d.replay_of_id %} <span class="badge neutral">Replay</span>{% endif %}{% if d.is_test %} <span class="badge neutral">Test</span>{% endif %}
+              <span class="sub mono wrap-any">{{ d.event.event_id }}</span></td>
+            <td>{% include "integrations/_delivery_result.html" %}</td>
+            <td class="num">{{ d.attempts }}</td>
+            <td class="nowrap">{% if not d.is_test and d.status != 'sending' %}
+              <form method="post" action="{% url 'integrations:webhook_replay' d.pk %}">{% csrf_token %}
+                <button class="btn btn-sm" type="submit"{% if not ep.enabled %} disabled{% endif %}>{% icon "refresh" %} Replay</button></form>{% endif %}</td>
+          </tr>
+          <tr class="pf-payload-row">
+            <td colspan="5">
+              <details class="pf-payload"><summary>Request and answer</summary>
+                <div class="pf-payload-body">
+                  <div><p class="small muted">Body sent</p><pre class="pf-pre">{{ d.event.pretty_payload }}</pre></div>
+                  <div><p class="small muted">Answer (first part)</p><pre class="pf-pre">{{ d.response_body|default:"(empty)" }}</pre></div>
+                </div>
+              </details>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}<div class="card-body muted">Nothing sent to this endpoint yet. Send a test event to check it.</div>{% endif %}
+    </section>
+  </div>
+
+  <div class="stack fluid">
+    <section class="card">
+      <div class="card-head"><h2>Health</h2></div>
+      <div class="card-body">
+        <dl class="kv small">
+          <dt>Status</dt><dd>{% if ep.enabled %}<span class="badge ok">Sending</span>{% else %}<span class="badge err">Off</span>{% endif %}</dd>
+          <dt>Failures in a row</dt><dd class="num">{{ ep.consecutive_failures }}</dd>
+          <dt>Last success</dt><dd>{{ ep.last_success_at|date:"j M Y, H:i"|default:"Never" }}</dd>
+          <dt>Last failure</dt><dd>{{ ep.last_failure_at|date:"j M Y, H:i"|default:"Never" }}</dd>
+        </dl>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Signing secret</h2></div>
+      <div class="card-body stack small">
+        <p>Events are signed with the endpoint's secret.{% if previous_active %} The previous secret also signs until {{ ep.previous_secret_expires_at|date:"j M, H:i" }}.{% endif %}</p>
+        <details class="reveal popover" data-menu><summary class="btn btn-sm">{% icon "key" %} New secret</summary>
+          <form class="pop-form" method="post" action="{% url 'integrations:webhook_rotate' ep.pk %}">{% csrf_token %}
+            <p class="small">A new secret is shown once. For {{ overlap_hours }} hours events carry signatures for both the new and the old secret, so the receiving system can switch over without losing events.</p>
+            <div><button class="btn btn-sm btn-primary" type="submit">Create new secret</button></div>
+          </form></details>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Remove</h2></div>
+      <div class="card-body small">
+        <details class="reveal popover" data-menu><summary class="btn btn-sm btn-danger">Remove endpoint</summary>
+          <form class="pop-form" method="post" action="{% url 'integrations:webhook_delete' ep.pk %}">{% csrf_token %}
+            <p class="small">Nothing more is sent to {{ ep.host }}, and its delivery history is removed.</p>
+            <div><button class="btn btn-sm btn-danger solid" type="submit">Remove endpoint</button></div>
+          </form></details>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

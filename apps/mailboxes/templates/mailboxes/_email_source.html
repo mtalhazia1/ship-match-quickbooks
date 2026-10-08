@@ -1,0 +1,23 @@
+{% load ui %}{% if doc.email %}{% with email=doc.email intake=doc.email.intake %}{% if compact %}
+<p class="small muted email-source">{% icon "inbox" %}<span>Emailed by {{ email.sender|default:"an unknown sender" }}{% if email.subject %} with subject “{{ email.subject|truncatechars:80 }}”{% endif %}{% if intake.mailbox_name %}, received through {{ intake.mailbox_name }}{% endif %}{% if email.received_at %} on {{ email.received_at|date:"j M Y, H:i" }}{% endif %}</span></p>
+{% else %}
+<section class="card email-source-card">
+  <div class="card-head"><div><h2>Received by email</h2><p>{% if intake %}Came in through {{ intake.mailbox_name|default:"a mailbox that was removed" }}{% if intake.mailbox_kind and intake.get_mailbox_kind_display != intake.mailbox_name %} ({{ intake.get_mailbox_kind_display }}){% endif %}.{% else %}Imported from an email.{% endif %}</p></div></div>
+  <div class="card-body">
+    <dl class="status-list">
+      <div><dt>From</dt><dd class="wrap-any">{{ email.sender|default:"Unknown" }}</dd></div>
+      <div><dt>Subject</dt><dd class="wrap-any">{{ email.subject|default:"(no subject)" }}</dd></div>
+      {% if email.received_at %}<div><dt>Received</dt><dd>{{ email.received_at|date:"j M Y, H:i" }}</dd></div>{% endif %}
+    </dl>
+    {% if intake %}{% with atts=intake.attachments.all %}{% if atts|length > 1 %}
+    <p class="lbl email-source-lbl">Everything attached to this email</p>
+    <ul class="attach-rows">
+      {% for a in atts %}
+      <li{% if a.document_id == doc.pk %} class="current"{% endif %}><span class="wrap-any">{% if a.document and a.document_id != doc.pk %}<a href="{% url 'review:document' a.document_id %}">{{ a.filename }}</a>{% else %}{{ a.filename }}{% endif %}</span>
+        <span class="sub">{% if a.document_id == doc.pk %}This document{% elif a.outcome == "skipped" %}{{ a.reason }}{% else %}{{ a.get_outcome_display }}{% endif %}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}{% endwith %}{% endif %}
+  </div>
+</section>
+{% endif %}{% endwith %}{% endif %}

@@ -1,0 +1,7 @@
+{% load ui %}{% if banner %}
+<div class="pf-banner pf-banner-{{ banner.tone }}" role="status">
+  {% if banner.tone == "error" %}{% icon "alert-circle" %}{% elif banner.tone == "warning" %}{% icon "alert" %}{% else %}{% icon "clock" %}{% endif %}
+  <span class="pf-banner-text">{{ banner.text }}</span>
+  {% if banner.admin %}<a class="btn btn-sm" href="{% url 'billing:settings' %}">{{ banner.action }}</a>{% endif %}
+</div>
+{% endif %}

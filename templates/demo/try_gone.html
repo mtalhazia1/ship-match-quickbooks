@@ -1,0 +1,10 @@
+{% extends "demo/public_base.html" %}
+{% block title %}Result not available{% endblock %}
+{% block content %}
+<div class="error-page">
+  <div class="code">Not available</div>
+  <h1>This result is no longer available</h1>
+  <p>Results are deleted after {{ retention_hours }} hours, or when you delete them yourself. The link may also be incomplete: check that you copied all of it.</p>
+  <div class="actions"><a class="btn btn-primary" href="{% url 'demo:try' %}">Try another document</a></div>
+</div>
+{% endblock %}

@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% load ui disputes_tags %}
+{% block title %}Draft {{ dispute.reference }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'disputes:list' %}?status=draft">Disputes</a>{% icon "chevron-right" %}<span>{{ dispute.reference }}</span></div>
+    <div class="actions" style="gap:12px"><h1>Draft {{ dispute.reference }}</h1><span class="badge neutral">Not sent</span>{% if dispute.ai_polished %}<span class="badge plain info">Worded by AI</span>{% endif %}</div>
+    <dl class="meta-grid">
+      <div><dt>Vendor</dt><dd>{{ dispute.vendor_name }}</dd></div>
+      <div><dt>Invoice</dt><dd>{{ dispute.invoice_number|default:"No number" }}</dd></div>
+      <div><dt>Shipment</dt><dd>{% if dispute.shipment_id %}<a href="{% url 'review:shipment' dispute.shipment_id %}#disputes">{{ dispute.shipment_reference }}</a>{% else %}{{ dispute.shipment_reference|default:"–" }}{% endif %}</dd></div>
+      <div><dt>Disputed</dt><dd>{{ dispute.amount_disputed|money:dispute.currency }}</dd></div>
+    </dl>
+  </div>
+</div>
+
+<div class="grid-side">
+  <form id="compose" method="post" class="card compose">{% csrf_token %}
+    <div class="card-head"><div><h2>Email to the vendor</h2><p>Edit anything before sending. The invoice PDF is attached automatically.</p></div></div>
+    <div class="card-body stack" style="gap:14px">
+      <div class="form-grid">
+        <div><label class="lbl" for="vendor_email">To</label>
+          <input class="w-full" id="vendor_email" type="email" name="vendor_email" value="{{ dispute.vendor_email }}" placeholder="billing@vendor.com" autocomplete="off">
+          <p class="hint">{% if dispute.vendor_email %}Remembered from the last dispute with this vendor.{% else %}The vendor's billing or accounts receivable address.{% endif %}</p></div>
+        <div><label class="lbl" for="contact_name">Contact name <span class="muted small">(optional)</span></label>
+          <input class="w-full" id="contact_name" type="text" name="contact_name" value="{{ dispute.contact_name }}" maxlength="200" placeholder="Used in the greeting">
+        </div>
+      </div>
+      <div><label class="lbl" for="cc">Copy to <span class="muted small">(optional)</span></label>
+        <input class="w-full" id="cc" type="text" name="cc" value="{{ dispute.cc }}" maxlength="500" placeholder="Separate addresses with commas"></div>
+      <div><label class="lbl" for="subject">Subject</label>
+        <input class="w-full" id="subject" type="text" name="subject" value="{{ dispute.subject }}" maxlength="200" required></div>
+      <div><label class="lbl" for="body">Message</label>
+        <textarea class="email-body" id="body" name="body" rows="22" required>{{ dispute.body }}</textarea></div>
+      <div class="attachment">{% icon "file" %}
+        {% if dispute.invoice %}<span>Attached: <strong>{{ dispute.invoice.original_filename }}</strong></span>
+          <a class="btn btn-sm btn-quiet" href="{% url 'review:document_file' dispute.invoice.pk %}" target="_blank" rel="noopener">{% icon "eye" %} Show PDF</a>
+        {% else %}<span class="muted">The invoice was removed, so this dispute can't be sent.</span>{% endif %}
+      </div>
+    </div>
+    <div class="compose-foot">
+      {% if can.approve %}
+      <button class="btn btn-primary" type="submit" name="action" value="send">{% icon "send" %} Send to {{ dispute.vendor_name|truncatechars:28 }}</button>
+      {% endif %}
+      <button class="btn{% if not can.approve %} btn-primary{% endif %}" type="submit" name="action" value="save">Save draft</button>
+      <button class="btn btn-quiet" type="submit" name="action" value="rewrite" formnovalidate title="Replace the subject and message with the standard wording">{% icon "refresh" %} Write it again</button>
+      {% if ai_enabled %}<button class="btn btn-quiet" type="submit" name="action" value="polish" title="Ask AI to reword the message; every amount and reference is checked">Polish with AI</button>{% endif %}
+      {% if not can.approve %}<span class="small muted">An approver sends disputes. Save the draft and ask one to review it.</span>{% endif %}
+    </div>
+  </form>
+
+  <div class="stack fluid">
+    <section class="card">
+      <div class="card-head"><div><h2>Evidence</h2><p>Problems on this invoice to raise with the vendor.</p></div></div>
+      <div class="card-body stack" style="gap:12px">
+        {% for i in issues %}
+        <label class="check dp-issue">
+          <input form="compose" type="checkbox" name="issues" value="{{ i.pk }}"{% if i.pk in linked %} checked{% endif %}>
+          <span><strong>{{ i.title }}</strong>{% if i.amount_at_risk %} <span class="dp-amt num">{{ i.amount_at_risk|money:i.currency }}</span>{% endif %}
+            <span class="sub">{{ i.message }}</span></span>
+        </label>
+        {% empty %}
+          {% for it in items %}<div class="dp-issue"><strong>{{ it.title }}</strong>{% if it.amount %} <span class="dp-amt num">{{ it.amount|money:it.currency }}</span>{% endif %}<span class="sub">{{ it.explanation }}</span></div>{% endfor %}
+          <p class="hint">The shipment's checks changed since this draft was written; the evidence above is what will be sent.</p>
+        {% endfor %}
+        <div><label class="lbl" for="amount">Amount disputed ({{ dispute.currency }})</label>
+          <input form="compose" id="amount" type="text" inputmode="decimal" name="amount" value="{{ dispute.amount_disputed }}" size="14">
+          <p class="hint">Money at risk on the chosen problems: {{ default_amount|money:dispute.currency }}. Change it if you agreed a different figure.</p></div>
+        <div><label class="lbl" for="follow_up_on">Follow up on</label>
+          <input form="compose" id="follow_up_on" type="date" name="follow_up_on" value="{{ dispute.follow_up_on|date:'Y-m-d' }}">
+          <p class="hint">Empty means {{ settings.follow_up_days }} days after sending ({{ follow_up_default|date:"j M Y" }} if sent today). Overdue disputes are flagged to the team.</p></div>
+        <label class="check"><input form="compose" type="checkbox" name="remember" checked>
+          <span>Remember this contact for {{ dispute.vendor_name }}<span class="sub">Next time the address is filled in for you.</span></span></label>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Replies</h2></div></div>
+      <div class="card-body small">
+        {% if reply_to %}<p>Vendor replies go to <strong>{{ reply_to }}</strong>{% if settings.copy_reply_to %}, which also gets a copy of the email{% endif %}.</p>
+        {% else %}<p class="muted">No reply-to address is set. {% if can.manage %}<a href="{% url 'disputes:settings' %}">Set one in Settings</a>{% else %}Ask an admin to set one in Settings{% endif %} so replies reach your team.</p>{% endif %}
+        <p class="muted">When the vendor answers, log the reply on the dispute and record the credit when it arrives.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-body">
+        <details class="reveal">
+          <summary class="btn btn-sm btn-danger">Discard draft</summary>
+          <form class="pop-form" method="post" action="{% url 'disputes:discard' dispute.pk %}">{% csrf_token %}
+            <p class="small">The draft is deleted. Nothing has been sent to the vendor.</p>
+            <div><button class="btn btn-sm btn-danger solid" type="submit">Discard {{ dispute.reference }}</button></div>
+          </form>
+        </details>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

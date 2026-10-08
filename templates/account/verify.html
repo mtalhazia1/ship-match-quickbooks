@@ -1,0 +1,17 @@
+{% extends "base_auth.html" %}
+{% block title %}Two-factor check{% endblock %}
+{% block content %}
+<h1>Enter your code</h1>
+<p class="lede">Open your authenticator app and enter the 6-digit code for ShipMatch ({{ username }}).</p>
+<form method="post">
+  {% csrf_token %}
+  {% if error %}<ul class="flash"><li class="error">{{ error }}</li></ul>{% endif %}
+  <div class="form-row">
+    <label class="lbl" for="id_code">Authentication code</label>
+    <input class="code-input" type="text" name="code" id="id_code" inputmode="numeric" autocomplete="one-time-code" maxlength="20" autofocus required>
+    <p class="hint">Lost your phone? Enter one of your recovery codes instead.</p>
+  </div>
+  <button class="btn btn-primary" type="submit">Verify and sign in</button>
+</form>
+<p class="auth-foot"><a href="{% url 'accounts:login' %}">Use a different account</a></p>
+{% endblock %}

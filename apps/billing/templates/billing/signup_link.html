@@ -1,0 +1,45 @@
+{% extends "demo/public_base.html" %}
+{% load ui %}
+{% block title %}{% if state == "confirm" %}Confirm your account{% else %}Sign-up link{% endif %}{% endblock %}
+{% block content %}
+<div class="pf-public-narrow">
+  <section class="card">
+    <div class="card-body stack">
+      {% if state == "confirm" %}
+        <div class="pf-public-icon">{% icon "check" %}</div>
+        <h1>Confirm your account</h1>
+        <p>Create <strong>{{ pending.company_name }}</strong> on ShipMatch with <strong>{{ pending.email }}</strong> as its admin.</p>
+        <form method="post" action="{% url 'signup:verify' token %}" class="stack">{% csrf_token %}
+          <div class="field{% if error %} has-error{% endif %}">
+            <label class="lbl" for="confirm-password">The password you chose when signing up</label>
+            <input id="confirm-password" type="password" name="password" class="w-full" autocomplete="current-password" required
+                   {% if error %}aria-invalid="true" aria-describedby="confirm-error"{% endif %}>
+            {% if error %}<p class="errorlist" id="confirm-error">{{ error }}</p>{% endif %}
+          </div>
+          <div><button class="btn btn-primary" type="submit">Confirm and open ShipMatch</button></div>
+        </form>
+      {% elif state == "expired" %}
+        <div class="pf-public-icon is-warning">{% icon "clock" %}</div>
+        <h1>This link has expired</h1>
+        <p>Confirmation links work for {{ verify_hours }} hours. Send yourself a new one; your details are kept.</p>
+        <form method="post" action="{% url 'signup:resend' %}" class="inline-form">{% csrf_token %}
+          <label class="sr-only" for="expired-email">Email address</label>
+          <input id="expired-email" type="email" name="email" value="{{ email }}" placeholder="you@company.com" required>
+          <button class="btn btn-primary" type="submit">Send a new link</button>
+        </form>
+      {% elif state == "used" %}
+        <div class="pf-public-icon">{% icon "check" %}</div>
+        <h1>Your account is ready</h1>
+        <p>This link was used already, so your company is set up. Sign in with your email and password.</p>
+        <p><a class="btn btn-primary" href="{% url 'accounts:login' %}">Sign in</a>
+          <a class="btn btn-quiet" href="{% url 'accounts:password_reset' %}">Forgot your password?</a></p>
+      {% else %}
+        <div class="pf-public-icon is-warning">{% icon "alert" %}</div>
+        <h1>This link doesn't work</h1>
+        <p>It may be incomplete: copy the whole link from the email into the address bar, or sign up again.</p>
+        <p><a class="btn btn-primary" href="{% url 'signup:start' %}">Sign up</a></p>
+      {% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}

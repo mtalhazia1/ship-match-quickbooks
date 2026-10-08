@@ -1,0 +1,30 @@
+<details class="popover close-adjust" data-focus>
+  <summary class="btn btn-sm">Adjust</summary>
+  <div class="pop-form">
+    <form method="post" action="{% url 'close:adjust' %}" class="close-adjust-form">{% csrf_token %}
+      <input type="hidden" name="period" value="{{ period|date:'Y-m-d' }}">
+      <input type="hidden" name="shipment" value="{{ ln.shipment_id }}">
+      <input type="hidden" name="group" value="{{ ln.group }}">
+      <input type="hidden" name="action" value="amount">
+      <strong>Use a known amount</strong>
+      <p class="hint">For example the amount the vendor quoted by email. It replaces the estimate until the invoice arrives.</p>
+      <label class="lbl" for="adj-amount-{{ forloop.counter }}">Amount ({{ report.currency }})</label>
+      <input id="adj-amount-{{ forloop.counter }}" type="text" name="amount" inputmode="decimal" required placeholder="1850.00">
+      <label class="lbl" for="adj-vendor-{{ forloop.counter }}">Vendor</label>
+      <input id="adj-vendor-{{ forloop.counter }}" type="text" name="vendor" value="{% if ln.vendor_key %}{{ ln.vendor_name }}{% endif %}" maxlength="200">
+      <label class="lbl" for="adj-note-{{ forloop.counter }}">Note</label>
+      <input id="adj-note-{{ forloop.counter }}" type="text" name="note" required maxlength="500" placeholder="Where the amount comes from">
+      <button class="btn btn-primary btn-sm" type="submit">Use this amount</button>
+    </form>
+    <form method="post" action="{% url 'close:adjust' %}" class="close-adjust-form">{% csrf_token %}
+      <input type="hidden" name="period" value="{{ period|date:'Y-m-d' }}">
+      <input type="hidden" name="shipment" value="{{ ln.shipment_id }}">
+      <input type="hidden" name="group" value="{{ ln.group }}">
+      <input type="hidden" name="action" value="exclude">
+      <strong>Not needed for this shipment</strong>
+      <label class="lbl" for="adj-why-{{ forloop.counter }}">Why</label>
+      <input id="adj-why-{{ forloop.counter }}" type="text" name="note" required maxlength="500" placeholder="For example: customer collects at the port">
+      <button class="btn btn-sm" type="submit">Don't accrue it</button>
+    </form>
+  </div>
+</details>

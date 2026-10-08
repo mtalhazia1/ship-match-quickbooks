@@ -1,0 +1,110 @@
+{% load static ui %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ShipMatch{% endblock %} – ShipMatch</title>
+  <link rel="icon" href="{% static 'img/favicon.svg' %}" type="image/svg+xml">
+  <link rel="preload" href="{% static 'fonts/Barlow-400.woff2' %}" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <script src="{% static 'js/app.js' %}" defer></script>
+  {% include "workflow/_head.html" %}
+  {% block head %}{% endblock %}
+  {% block scripts %}{% endblock %}
+</head>
+<body data-tz="{{ timezone_name }}" data-tz-source="{{ timezone_source }}">
+<a class="sr-only" href="#main">Skip to content</a>
+{% include "demo/_banner.html" %}
+{% if user.is_authenticated %}
+<div class="shell">
+  <aside class="sidebar" aria-label="Main navigation">
+    <a class="brand" href="{% url 'core:dashboard' %}">
+      <span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="1" fill="none" stroke="#102a43" stroke-width="2"/><path d="M6.5 8.5v7M10 8.5v7M13.5 8.5v7M17 8.5v7" stroke="#102a43" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+      <span><span class="brand-name">ShipMatch</span><span class="brand-sub">Freight AP reconciliation</span></span>
+    </a>
+    {% if org %}
+    <div class="org-switch">
+      {% if orgs|length > 1 %}
+      <form method="get" action="{% url 'core:dashboard' %}">
+        <label class="sr-only" for="org-select">Organization</label>
+        <select id="org-select" name="org" data-autosubmit>
+          {% for o in orgs %}<option value="{{ o.slug }}"{% if o.pk == org.pk %} selected{% endif %}>{{ o.name }}</option>{% endfor %}
+        </select>
+      </form>
+      {% else %}<span class="org-name">{{ org.name }}</span>{% endif %}
+    </div>
+    {% include "workflow/_org_links.html" %}
+    <nav class="nav">
+      <a href="{% url 'core:dashboard' %}" class="{% if section == 'dashboard' %}on{% endif %}">{% icon "grid" %} Dashboard</a>
+      <a href="{% url 'review:queue' %}" class="{% if section == 'queue' %}on{% endif %}">{% icon "inbox" %} Review queue
+        {% if nav.needs_review %}<span class="count">{{ nav.needs_review }}</span>{% endif %}</a>
+      {% include "workflow/_nav_link.html" %}
+      <a href="{% url 'review:documents' %}" class="{% if section == 'documents' %}on{% endif %}">{% icon "file" %} Documents
+        {% if nav.loose %}<span class="count alert" title="Documents not in a shipment">{{ nav.loose }}</span>{% endif %}</a>
+      <a href="{% url 'rates:list' %}" class="{% if section == 'rates' %}on{% endif %}">{% icon "tag" %} Rates</a>
+      <a href="{% url 'savings:summary' %}" class="{% if section == 'savings' %}on{% endif %}">{% icon "trending" %} Savings</a>
+      {% include "landed/_nav_link.html" %}
+      {% include "disputes/_nav_link.html" %}
+      {% if can.audit or can.manage %}<span class="nav-group">Controls</span>{% endif %}
+      {% include "close/_nav_link.html" %}
+      {% if can.audit %}<a href="{% url 'core:accuracy' %}" class="{% if section == 'accuracy' %}on{% endif %}">{% icon "check" %} Reading accuracy</a>
+      <a href="{% url 'core:audit' %}" class="{% if section == 'audit' %}on{% endif %}">{% icon "shield" %} Audit log</a>{% endif %}
+      {% if can.manage %}
+      <a href="{% url 'core:team' %}" class="{% if section == 'team' %}on{% endif %}">{% icon "users" %} Team</a>
+      <a href="{% url 'core:settings' %}" class="{% if section == 'settings' %}on{% endif %}">{% icon "sliders" %} Settings</a>
+      <a href="/api/docs">{% icon "book" %} API reference</a>
+      {% endif %}
+    </nav>
+    {% endif %}
+    <div class="sidebar-foot">
+      <div>Times shown in {{ timezone_name }}</div>
+      <div>Version {{ app_version }}</div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <button class="btn btn-quiet menu-btn" type="button" data-nav-toggle aria-label="Open navigation">{% icon "menu" %}</button>
+      {% if org %}
+      <form class="search" method="get" action="{% url 'review:search' %}" role="search">
+        {% icon "search" %}
+        <label class="sr-only" for="global-search">Search shipments and documents</label>
+        <input id="global-search" type="search" name="q" value="{{ request.GET.q|default:'' }}" placeholder="Search B/L, container, PO, invoice or file name" autocomplete="off">
+        <kbd>/</kbd>
+      </form>
+      {% endif %}
+      <span class="spacer"></span>
+      {% include "workflow/_topbar.html" %}
+      <details class="user-menu" data-menu>
+        <summary aria-label="Account menu">
+          <span class="avatar">{{ user|initials }}</span>
+          <span class="who"><strong>{{ user|display_name }}</strong><span>{{ role_label|default:"No role" }}{% if org %} at {{ org.name|truncatechars:28 }}{% endif %}</span></span>
+        </summary>
+        <div class="menu-pop">
+          <div class="meta">Signed in as {{ user.get_username }}</div>
+          <a href="{% url 'accounts:security' %}">{% icon "lock" %} Security and sign-in</a>
+          <a href="{% url 'accounts:password_change' %}">{% icon "key" %} Change password</a>
+          {% if user.is_staff %}<a href="{% url 'admin:index' %}">{% icon "sliders" %} Platform admin</a>{% endif %}
+          <hr>
+          <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}
+            <button type="submit">{% icon "logout" %} Sign out</button>
+          </form>
+        </div>
+      </details>
+    </header>
+
+    <main id="main" tabindex="-1" class="content">
+      {% include "billing/_banner.html" %}
+      {% include "includes/messages.html" %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+{% else %}
+<main id="main" tabindex="-1" class="content">
+  {% include "includes/messages.html" %}
+  {% block public_content %}{% endblock %}
+</main>
+{% endif %}
+</body>
+</html>

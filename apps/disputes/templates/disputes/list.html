@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% load ui disputes_tags %}
+{% block title %}Disputes{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Disputes</h1>
+    <p class="lede">Money asked back from vendors for wrong invoices. Start a dispute from a shipment's issues; follow up here until the credit arrives.</p>
+  </div>
+  {% if can.manage %}<a class="btn" href="{% url 'disputes:settings' %}">{% icon "sliders" %} Email settings</a>{% endif %}
+</div>
+
+<div class="kpis">
+  <a class="kpi" href="?status=waiting">
+    <div class="k">Waiting for vendors</div>
+    <div class="v">{% if s.waiting.complete %}{{ s.waiting.home|money:org.home_currency }}{% else %}{{ s.waiting.count }}{% endif %}</div>
+    <div class="d">{% if s.waiting.complete %}{{ s.waiting.count }} dispute{{ s.waiting.count|pluralize }} open{% else %}{% for cur, amount in s.waiting.by_currency.items %}{{ amount|money:cur }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</div>
+  </a>
+  <a class="kpi{% if s.overdue %} attention{% endif %}" href="?status=waiting&amp;age=overdue">
+    <div class="k">Past follow-up date</div>
+    <div class="v">{{ s.overdue }}</div>
+    <div class="d">{% if s.overdue %}Chase these vendors{% else %}No vendor is late{% endif %}</div>
+  </a>
+  <a class="kpi" href="?status=all">
+    <div class="k">Recovered this month</div>
+    <div class="v">{{ s.recovered_month|money:org.home_currency }}</div>
+    <div class="d">Since {{ s.month_start|date:"j M Y" }}</div>
+  </a>
+  <a class="kpi" href="?status=all">
+    <div class="k">Recovered this quarter</div>
+    <div class="v">{{ s.recovered_quarter|money:org.home_currency }}</div>
+    <div class="d">Since {{ s.quarter_start|date:"j M Y" }}</div>
+  </a>
+</div>
+
+{% if s.waiting.count %}
+<section class="card aging-card">
+  <div class="card-head"><div><h2>Waiting by age</h2><p>Days since each open dispute was sent. Choose a group to list it.</p></div></div>
+  <div class="aging">
+    {% for b in s.aging %}
+    <a class="aging-cell{% if age == b.key %} on{% endif %}" href="?status=waiting&amp;age={{ b.key }}">
+      <span class="k">{{ b.label }}</span>
+      <span class="v num">{{ b.count }}</span>
+      <span class="d num">{% if b.count %}{% if b.money.complete %}{{ b.money.home|money:org.home_currency }}{% else %}{% for cur, amount in b.money.by_currency.items %}{{ amount|money:cur }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}{% else %}Nothing{% endif %}</span>
+      <span class="aging-bar"><span style="width:{% widthratio b.count s.waiting.count 100 %}%"></span></span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<nav class="tabs" aria-label="Dispute status" style="margin-top:18px">
+  {% for key, name, n in tabs %}
+  <a href="?{% if tab_query %}{{ tab_query }}&amp;{% endif %}status={{ key }}" class="{% if key == tab %}on{% endif %}"{% if key == tab %} aria-current="page"{% endif %}>{{ name }}<span class="n">{{ n }}</span></a>
+  {% endfor %}
+</nav>
+
+<form class="filters" method="get">
+  <input type="hidden" name="status" value="{{ tab }}">
+  <label class="sr-only" for="q">Search disputes</label>
+  <input id="q" type="search" name="q" value="{{ q }}" placeholder="Reference, invoice or vendor">
+  <label class="sr-only" for="vendor">Vendor</label>
+  <select id="vendor" name="vendor" data-autosubmit>
+    <option value="">All vendors</option>
+    {% for key, name in vendors %}<option value="{{ key }}"{% if key == vendor %} selected{% endif %}>{{ name }}</option>{% endfor %}
+  </select>
+  <label class="sr-only" for="age">Age</label>
+  <select id="age" name="age" data-autosubmit>
+    <option value="">Any age</option>
+    <option value="overdue"{% if age == "overdue" %} selected{% endif %}>Past follow-up date</option>
+    {% for key, label, lo, hi in ages %}<option value="{{ key }}"{% if key == age %} selected{% endif %}>Sent {{ label|lower }} ago</option>{% endfor %}
+  </select>
+  <button class="btn" type="submit">{% icon "search" %} Search</button>
+  {% if q or vendor or age %}<a class="btn btn-quiet" href="?status={{ tab }}">Clear</a>{% endif %}
+</form>
+
+<section class="card">
+  {% if page.object_list %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr>
+        <th>Dispute</th><th>Vendor and invoice</th><th>Status</th><th class="num">Disputed</th><th class="num">Recovered</th>
+        <th>Sent</th><th>Follow up</th>
+      </tr></thead>
+      <tbody>
+      {% for d in page %}
+        <tr>
+          <td><a class="row-link" href="{% url 'disputes:detail' d.pk %}">{{ d.reference }}</a>
+            <span class="sub">{% if d.shipment_id %}<a href="{% url 'review:shipment' d.shipment_id %}#disputes">{{ d.shipment_reference }}</a>{% else %}{{ d.shipment_reference|default:"No shipment" }}{% endif %}</span></td>
+          <td>{{ d.vendor_name }}<span class="sub">Invoice {{ d.invoice_number|default:"without number" }}</span></td>
+          <td><span class="badge {{ d.status|dispute_badge }}">{{ d.get_status_display }}</span>{% if d.hold_released and d.is_waiting %}<span class="sub">Shipment released</span>{% endif %}</td>
+          <td class="num">{{ d.amount_disputed|money:d.currency }}</td>
+          <td class="num">{% if d.amount_recovered %}{{ d.amount_recovered|money:d.currency }}{% else %}<span class="muted">–</span>{% endif %}</td>
+          <td class="nowrap">{% if d.sent_at %}{{ d.sent_at|date:"j M Y" }}<span class="sub">{{ d.days_open }} day{{ d.days_open|pluralize }} open</span>{% else %}<span class="muted">Not sent</span>{% endif %}</td>
+          <td class="nowrap">{% if d.is_waiting and d.follow_up_on %}{{ d.follow_up_on|date:"j M Y" }}{% if d.is_overdue %}<span class="sub"><span class="tag warning">Overdue</span></span>{% endif %}{% else %}<span class="muted">–</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "includes/pager.html" %}
+  {% else %}
+  <div class="empty">
+    {% icon "send" %}
+    {% if q or vendor or age %}<h2>No disputes match these filters</h2><p class="muted">Clear the filters or look in another tab.</p>
+    {% elif tab == "waiting" %}<h2>No vendor owes you an answer</h2><p class="muted">When a check finds money at risk on an invoice, open the shipment and choose “Dispute with vendor”.</p>
+    {% else %}<h2>Nothing here yet</h2>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

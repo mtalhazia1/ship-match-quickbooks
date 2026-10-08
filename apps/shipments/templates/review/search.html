@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Search{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{% if q %}Results for “{{ q }}”{% else %}Search{% endif %}</h1>
+    <p class="lede">Searches shipment references, B/L, container and PO numbers, invoice numbers, vendors and file names.</p>
+  </div>
+</div>
+
+{% if not q %}
+<section class="card"><div class="empty">{% icon "search" %}<h3>Type in the search box above</h3><p class="muted">Press / anywhere to jump to it.</p></div></section>
+{% else %}
+<section class="card">
+  <div class="card-head"><h2>Shipments <span class="muted num">{{ shipments|length }}</span></h2></div>
+  {% if shipments %}
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Shipment</th><th>Status</th><th>Bill of lading</th><th>Containers</th><th>Open issues</th></tr></thead>
+    <tbody>
+    {% for s in shipments %}
+      <tr>
+        <td><a class="row-link" href="{% url 'review:shipment' s.pk %}">{{ s.reference }}</a></td>
+        <td>{% include "includes/status.html" %}</td>
+        <td>{{ s.bl_number|default:"Not received" }}</td>
+        <td>{{ s.container_numbers|join:", "|default:"–" }}</td>
+        <td><div class="tags">{% if s.n_errors %}<span class="tag error">{{ s.n_errors }} error{{ s.n_errors|pluralize }}</span>{% endif %}{% if s.n_warnings %}<span class="tag warning">{{ s.n_warnings }} warning{{ s.n_warnings|pluralize }}</span>{% endif %}{% if not s.n_errors and not s.n_warnings %}<span class="muted small">None</span>{% endif %}</div></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<div class="card-body muted">No shipments match.</div>{% endif %}
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>Documents <span class="muted num">{{ docs|length }}</span></h2></div>
+  {% if docs %}
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>File</th><th>Type</th><th>Shipment</th><th>Received</th></tr></thead>
+    <tbody>
+    {% for d in docs %}
+      <tr>
+        <td><a class="row-link wrap" href="{% url 'review:document' d.pk %}">{{ d.original_filename }}</a></td>
+        <td>{{ d.get_doc_type_display }}</td>
+        <td>{% if d.match %}<a href="{% url 'review:shipment' d.match.shipment_id %}">{{ d.match.shipment.reference }}</a>{% else %}<span class="badge warn">Not in a shipment</span>{% endif %}</td>
+        <td class="muted nowrap">{{ d.received_at|date:"j M Y, H:i" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<div class="card-body muted">No documents match.</div>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

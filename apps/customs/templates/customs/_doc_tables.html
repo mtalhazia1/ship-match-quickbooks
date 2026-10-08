@@ -1,0 +1,39 @@
+{% load ui customs_tags %}{% if d.doc_type == "customs_entry" %}{% entry_lines_for d as clines %}{% if clines %}
+<div class="table-wrap lines cu-lines">
+  <table class="data">
+    <caption class="sr-only">Tariff lines of {{ d.original_filename }}, with the duty recalculated</caption>
+    <thead><tr><th>Line</th><th>Tariff number</th><th class="num">Entered value</th><th class="num">Rate</th><th class="num">Duty</th><th class="num">Should be</th><th><span class="sr-only">Show on page</span></th></tr></thead>
+    <tbody>
+    {% for c in clines %}
+    <tr class="{% if c.mismatch %}cu-bad{% endif %}">
+      <td class="nowrap">{{ c.number|default:forloop.counter }}</td>
+      <td><span class="mono">{{ c.hts|default:"–" }}</span><span class="sub">{{ c.description|default:"No description"|truncatechars:60 }}</span></td>
+      <td class="num">{% if c.own_value %}{{ c.value|money }}{% elif c.value is not None %}<span class="muted" title="Chapter 99 lines use the value of the line above">{{ c.value|money }}</span>{% else %}–{% endif %}</td>
+      <td class="num nowrap">{{ c.rate_text|default:"–" }}</td>
+      <td class="num">{{ c.stated|money }}</td>
+      <td class="num">{% if c.expected is not None %}{% if c.mismatch %}<strong class="cu-diff">{{ c.expected|money }}</strong>{% else %}{{ c.expected|money }}{% endif %}{% else %}<span class="muted" title="Specific or compound rate: not recalculated">–</span>{% endif %}</td>
+      <td><button class="btn btn-sm btn-quiet ev-issue cu-ev" type="button" data-evidence-issue data-evidence-doc="{{ d.pk }}" data-evidence-targets="entry_lines={{ c.index }}" data-evidence-label="{{ c.label }}" aria-label="Show {{ c.label }} on the page" hidden><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg></button></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}{% elif d.doc_type == "arrival_notice" %}{% container_dates_for d as crows %}{% if crows %}
+<div class="table-wrap lines cu-lines">
+  <table class="data">
+    <caption class="sr-only">Dates printed per container on {{ d.original_filename }}</caption>
+    <thead><tr><th>Container</th><th>Discharged</th><th>Last free day</th><th>Empty return by</th><th><span class="sr-only">Show on page</span></th></tr></thead>
+    <tbody>
+    {% for r in crows %}
+    <tr>
+      <td class="mono">{{ r.container_number }}</td>
+      <td class="nowrap">{{ r.discharge_date|cu_day }}</td>
+      <td class="nowrap">{{ r.demurrage_last_free_day|cu_day }}</td>
+      <td class="nowrap">{{ r.detention_last_free_day|cu_day }}</td>
+      <td><button class="btn btn-sm btn-quiet ev-issue cu-ev" type="button" data-evidence-issue data-evidence-doc="{{ d.pk }}" data-evidence-targets="container_dates={{ forloop.counter0 }}" data-evidence-label="container {{ r.container_number }}" aria-label="Show {{ r.container_number }} on the page" hidden><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg></button></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}{% endif %}

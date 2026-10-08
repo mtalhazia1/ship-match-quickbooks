@@ -1,0 +1,72 @@
+{% load ui %}{# Settings > Accounting: Xero. #}
+<section class="card" id="xero">
+  <div class="card-head"><div><h2>Xero</h2><p>Approved invoices are posted as bills, credit notes as supplier credit notes, each with the PDF attached. Posting never creates duplicates.</p></div>
+    {% if xero_conn and xero_conn.needs_reconnect %}<span class="badge err">Needs reconnecting</span>{% elif xero_conn and xero_conn.tenant_id %}<span class="badge ok">Connected</span>{% elif xero_conn %}<span class="badge warn">Choose organisation</span>{% else %}<span class="badge neutral">Not connected</span>{% endif %}</div>
+  <div class="card-body">
+    {% if xero_conn and xero_conn.tenant_id %}
+      <dl class="meta-grid" style="margin:0 0 16px">
+        <div><dt>Organisation</dt><dd>{{ xero_conn.tenant_name|default:"–" }}</dd></div>
+        <div><dt>Base currency</dt><dd>{{ xero_conn.home_currency|default:"–" }}</dd></div>
+        <div><dt>Other currencies</dt><dd>{{ xero_conn.other_currencies|join:", "|default:"None" }}</dd></div>
+        <div><dt>Connected</dt><dd>{{ xero_conn.connected_at|date:"j M Y" }}</dd></div>
+      </dl>
+      {% if xero_conn.home_currency and xero_conn.home_currency != org.home_currency %}
+      <ul class="flash"><li class="warning">{% icon "alert" %}<span>Xero uses {{ xero_conn.home_currency }} but ShipMatch is set to {{ org.home_currency }}. Change the home currency in Settings &gt; Organization so totals and approval limits match.</span></li></ul>
+      {% endif %}
+      {% if error and active.system == "xero" %}<ul class="flash"><li class="error">{% icon "alert-circle" %}<span>Couldn't load accounts from Xero: {{ error|truncatechars:220 }}</span></li></ul>{% endif %}
+      {% if not xero_conn.needs_reconnect %}
+      <form method="post" class="xero-form" action="{% url 'accounting:xero_settings' org.pk %}">{% csrf_token %}
+        <div class="xero-fields">
+          <div>
+            <label class="lbl" for="xero-acct">Default expense account</label>
+            {% if accounts and active.system == "xero" %}
+            <select id="xero-acct" name="default_account_code">
+              <option value="">Choose an account</option>
+              {% for a in accounts %}<option value="{{ a.id }}"{% if a.id == xero_conn.default_account_code %} selected{% endif %}>{{ a.id }} {{ a.name }} ({{ a.type }})</option>{% endfor %}
+            </select>
+            {% else %}
+            <input id="xero-acct" type="text" name="default_account_code" value="{{ xero_conn.default_account_code }}" placeholder="Account code, e.g. 310" maxlength="20">
+            {% endif %}
+            <p class="hint">Used when a vendor has no account rule of its own. Only expense accounts with a code are listed.</p>
+          </div>
+          <div>
+            <label class="lbl" for="xero-status">New bills in Xero</label>
+            <select id="xero-status" name="bill_status">
+              {% for value, name in bill_statuses %}<option value="{{ value }}"{% if value == xero_conn.bill_status %} selected{% endif %}>{{ name }}</option>{% endfor %}
+            </select>
+            <p class="hint">Drafts wait for someone to approve them in Xero. Approved bills can be paid straight away.</p>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit">Save</button>
+      </form>
+      {% endif %}
+      <div class="actions" style="margin-top:16px">
+        <a class="btn btn-sm" href="{% url 'accounting:xero_connect' org.pk %}">Connect again</a>
+        {% if xero_conn.tenants|length > 1 %}<a class="btn btn-sm" href="{% url 'accounting:xero_tenant' org.pk %}">Change organisation</a>{% endif %}
+        <details class="reveal popover" data-menu style="display:inline-block">
+          <summary class="btn btn-danger btn-sm">Disconnect</summary>
+          <form class="pop-form" method="post" action="{% url 'accounting:xero_disconnect' org.pk %}" style="left:0;right:auto">{% csrf_token %}
+            <p class="small">Xero is told to cancel ShipMatch's access. Approved shipments can't be posted until you connect again. Bills already in Xero stay there.</p>
+            <button class="btn btn-sm btn-danger solid" type="submit">Disconnect Xero</button>
+          </form>
+        </details>
+      </div>
+    {% elif xero_conn %}
+      <p>You signed in to Xero, but ShipMatch doesn't know which organisation to post to yet.</p>
+      <a class="btn btn-primary" href="{% url 'accounting:xero_tenant' org.pk %}">Choose organisation</a>
+    {% elif demo_blocked %}
+      <p class="muted">This is the public demo, so ShipMatch doesn't connect to Xero here. In your own ShipMatch an admin connects Xero from this page.</p>
+    {% elif xero_configured %}
+      {% if active.system == "quickbooks" %}
+      <p>Bills post to QuickBooks. To post to Xero instead, connect it here: QuickBooks is disconnected once Xero is connected. Bills already in QuickBooks stay there, but their payments are no longer checked.</p>
+      <a class="btn" href="{% url 'accounting:xero_connect' org.pk %}">Connect Xero instead</a>
+      {% else %}
+      <p>Connect the Xero organisation that should receive bills. You'll sign in to Xero and allow ShipMatch to read contacts and accounts and to create bills.</p>
+      <a class="btn btn-primary" href="{% url 'accounting:xero_connect' org.pk %}">Connect Xero</a>
+      {% endif %}
+    {% else %}
+      <p>Xero isn't set up on this server yet. Create an app at developer.xero.com, then add its keys to the <code>.env</code> file and restart ShipMatch:</p>
+      <div class="codes" style="grid-template-columns:1fr">XERO_CLIENT_ID=...<br>XERO_CLIENT_SECRET=...<br>XERO_REDIRECT_URI={{ xero_redirect_uri }}</div>
+    {% endif %}
+  </div>
+</section>

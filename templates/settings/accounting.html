@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Accounting{% endblock %}
+{% block content %}
+{% include "settings/_nav.html" %}
+<div class="grid-side">
+  <div class="stack fluid">
+    {% include "accounting/_settings_banner.html" %}
+    {% if active.system == "xero" or not conn and xero_conn %}
+      {% include "accounting/_xero_card.html" %}
+      {% include "accounting/_quickbooks_card.html" %}
+    {% else %}
+      {% include "accounting/_quickbooks_card.html" %}
+      {% include "accounting/_xero_card.html" %}
+    {% endif %}
+    {% include "accounting/_app_settings.html" %}
+  </div>
+  <div class="stack fluid">
+    {% include "accounting/_rules_card.html" %}
+    {% include "accounting/_payments_card.html" %}
+  </div>
+</div>
+{% endblock %}

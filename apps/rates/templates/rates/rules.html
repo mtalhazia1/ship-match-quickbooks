@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Checking rules{% endblock %}
+{% block content %}
+{% include "rates/_head.html" %}
+
+<div class="grid-side">
+  <form method="post" class="stack money-stack" novalidate>
+    {% csrf_token %}
+    <section class="card">
+      <div class="card-head"><div><h2>Tolerance</h2><p>Small differences (rounding, exchange rates) are let through. An overcharge is flagged when it is more than both limits.</p></div></div>
+      <div class="card-body form-grid">
+        {% include "rates/_field.html" with field=form.tolerance_percent hint="Of the amount the quote allows" %}
+        {% include "rates/_field.html" with field=form.tolerance_amount hint="In "|add:org.home_currency|add:", converted for other currencies" %}
+      </div>
+      <div class="card-body small" style="border-top:1px solid var(--line)">
+        With the saved rules, on a quoted {{ org.home_currency }} 2,400.00 an invoice up to {{ example|money:org.home_currency }} over is let through, and {{ example_next|money:org.home_currency }} over or more is flagged.
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Checks</h2></div>
+      <div class="card-body stack" style="gap:14px">
+        <label class="check">{{ form.warn_no_quote }}<span><strong>Warn when no quote fits</strong><span class="sub">The vendor has quotes on file, but none covers the shipment's lane, date and equipment. Usually a spot rate or a quote that needs extending.</span></span></label>
+        <label class="check">{{ form.check_unlisted_vendors }}<span><strong>Check every vendor's extra charges</strong><span class="sub">Also flag detention, exam fees and other extras from vendors with no quotes or approved extras on file. Off: those vendors are not checked until you add their rates.</span></span></label>
+        <label class="check">{{ form.ai_classify }}<span><strong>Let the AI name unknown charges</strong><span class="sub">{% if ai_on %}When a charge name isn't recognized, the AI picks the closest charge code once and ShipMatch remembers it under Charge names.{% else %}AI reading is off for this installation, so unknown names count as “other” until someone teaches them.{% endif %}</span></span></label>
+      </div>
+    </section>
+    {% if can_manage %}
+    <div class="actions"><button class="btn btn-primary" type="submit">Save checking rules</button>
+      <span class="small muted">Open shipments are checked again after saving.</span></div>
+    {% else %}
+    <p class="small muted">Only admins can change the checking rules.</p>
+    {% endif %}
+  </form>
+
+  <div class="stack money-stack">
+    <section class="card">
+      <div class="card-head"><h2>What is checked</h2></div>
+      <ul class="plain-list">
+        <li><span class="tag error">Error</span> <strong>Charged more than the quote</strong><span class="sub">A charge above the quote by more than the tolerance, or a base charge the quote doesn't list. Blocks approval until an approver overrides it.</span></li>
+        <li><span class="tag warning">Warning</span> <strong>Extra charge not approved</strong><span class="sub">Not in the quote or the vendor's approved extras, or above the agreed cap.</span></li>
+        <li><span class="tag warning">Warning</span> <strong>Extra charge couldn't be checked</strong><span class="sub">Approved, but the line doesn't show the days or hours.</span></li>
+        <li><span class="tag warning">Warning</span> <strong>No matching quote</strong><span class="sub">Quotes on file, but none fits the shipment.</span></li>
+        <li><span class="tag warning">Warning</span> <strong>Quote in a different currency</strong><span class="sub">No exchange rate to compare with.</span></li>
+      </ul>
+      <div class="card-body small muted" style="border-top:1px solid var(--line)">Only freight invoices are checked. The lane comes from the bill of lading in the same shipment, the date from the B/L issue date.</div>
+    </section>
+    {% if can_edit %}
+    <section class="card">
+      <div class="card-head"><div><h2>Check open shipments again</h2><p>Happens automatically after rate changes. Use this after loading many documents.</p></div></div>
+      <div class="card-body"><form method="post" action="{% url 'rates:recheck' %}">{% csrf_token %}<button class="btn" type="submit">{% icon "refresh" %} Check open shipments now</button></form></div>
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,6 @@
+<nav class="tabs" aria-label="Rates sections">
+  <a href="{% url 'rates:list' %}" class="{% if tab == 'quotes' %}on{% endif %}"{% if tab == 'quotes' %} aria-current="page"{% endif %}>Quotes<span class="n">{{ counts.quotes }}</span></a>
+  <a href="{% url 'rates:extras' %}" class="{% if tab == 'extras' %}on{% endif %}"{% if tab == 'extras' %} aria-current="page"{% endif %}>Approved extra charges<span class="n">{{ counts.extras }}</span></a>
+  <a href="{% url 'rates:charge_names' %}" class="{% if tab == 'names' %}on{% endif %}"{% if tab == 'names' %} aria-current="page"{% endif %}>Charge names</a>
+  <a href="{% url 'rates:rules' %}" class="{% if tab == 'rules' %}on{% endif %}"{% if tab == 'rules' %} aria-current="page"{% endif %}>Checking rules</a>
+</nav>

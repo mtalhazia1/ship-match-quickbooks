@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% load ui customs_tags %}
+{% block title %}Free time{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'core:dashboard' %}">Dashboard</a>{% icon "chevron-right" %}<span>Free time</span></div>
+    <h1>Free time</h1>
+    <p class="lede">Every container from an arrival notice, with the day it must be picked up and the day the empty must go back. Today is {{ today|cu_day }} in {{ org_tz }}.</p>
+  </div>
+  {% if can.manage %}<a class="btn" href="{% url 'customs:settings' %}">{% icon "sliders" %} Free time settings</a>{% endif %}
+</div>
+
+<nav class="tabs" aria-label="Containers">
+  {% for key, name, n in tabs %}<a href="?tab={{ key }}" class="{% if key == tab %}on{% endif %}"{% if key == tab %} aria-current="page"{% endif %}>{{ name }}<span class="n">{{ n }}</span></a>{% endfor %}
+</nav>
+
+<section class="card">
+  {% if page.object_list %}
+  <div class="table-wrap">
+    <table class="data cu-list">
+      <thead><tr><th>Container</th><th>Shipment</th><th>Discharged</th><th>To do</th><th>By</th><th>Status</th><th class="num">Estimated cost</th></tr></thead>
+      <tbody>
+      {% for row, st in page.object_list %}
+      <tr>
+        <td><strong class="mono">{{ row.container_number }}</strong><span class="sub">{{ row.carrier_name|default:"Carrier not printed" }}</span></td>
+        <td><a class="row-link" href="{% url 'review:shipment' row.shipment_id %}#free-time">{{ row.shipment.reference }}</a><span class="sub">B/L {{ row.shipment.bl_number|default:"not received" }}</span></td>
+        <td class="nowrap">{{ row.discharge_date|cu_day }}{% if row.discharge_estimated %}<span class="sub">Estimated</span>{% endif %}</td>
+        <td>{% if st.stage == "closed" %}Done{% elif st.stage == "detention" %}Return empty{% else %}Pick up{% endif %}{% if row.terminal and st.stage == "demurrage" %}<span class="sub">{{ row.terminal }}</span>{% endif %}</td>
+        <td class="nowrap">{% if st.stage == "closed" %}{{ row.returned_on|cu_day }}{% else %}{{ st.lfd|cu_day }}{% endif %}</td>
+        <td><span class="badge {{ st|cu_tone }}">{{ st.text }}</span></td>
+        <td class="num">{% if st.accrued %}{{ st.accrued|money:st.daily_currency }}<span class="sub">{{ st.daily|money:st.daily_currency }} a day</span>{% elif st.daily and st.stage != "closed" %}{{ st.daily|money:st.daily_currency }} a day{% elif st.stage != "closed" %}<span class="muted">No rate on file</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "includes/pager.html" with page=page query="tab="|add:tab %}
+  {% else %}
+  <div class="empty">{% icon "check" %}
+    {% if tab == "attention" %}<h3>Nothing needs action</h3><p class="muted">No open container's last free day is within {{ lead_days }} day{{ lead_days|pluralize }} or past.</p>
+    {% elif tab == "closed" %}<h3>No returned containers yet</h3><p class="muted">Containers appear here once their empty return date is entered.</p>
+    {% else %}<h3>No containers</h3><p class="muted">Free time comes from arrival notices. Upload or forward one and its containers appear here.</p>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

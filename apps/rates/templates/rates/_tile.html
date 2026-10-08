@@ -1,0 +1,5 @@
+{% load rates_tags %}{% if show %}<a class="kpi kpi-money" href="{% url 'savings:summary' %}">
+    <div class="k">Overcharges caught this month</div>
+    <div class="v"><span class="cur">{{ s.currency }}</span> {{ s.caught|whole }}</div>
+    <div class="d">{% if s.count %}{{ s.prevented|whole }} prevented, {{ s.at_risk|whole }} still open{% else %}Nothing flagged yet this month{% endif %}</div>
+  </a>{% endif %}

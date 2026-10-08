@@ -1,0 +1,29 @@
+{% load ui customs_tags %}{% if show %}
+<section class="card cu-dash" aria-labelledby="cu-dash-title">
+  <div class="card-head">
+    <div><h2 id="cu-dash-title">Containers near last free day</h2>
+      <p>Pick up or return these to avoid demurrage and detention. Alerts go out {{ lead_days }} day{{ lead_days|pluralize }} ahead.</p></div>
+    <a class="btn btn-sm" href="{% url 'customs:free_time' %}">All containers <span class="muted num">{{ open_count }}</span></a>
+  </div>
+  {% if rows %}
+  <div class="table-wrap">
+    <table class="data compact">
+      <thead><tr><th>Container</th><th>To do</th><th>By</th><th>Status</th><th class="num">Estimated cost</th></tr></thead>
+      <tbody>
+      {% for row, st in rows %}
+      <tr>
+        <td><a class="row-link mono" href="{% url 'review:shipment' row.shipment_id %}#free-time">{{ row.container_number }}</a><span class="sub">{{ row.shipment.reference }}{% if row.terminal %}, {{ row.terminal }}{% endif %}</span></td>
+        <td>{% if st.stage == "detention" %}Return empty{% else %}Pick up{% endif %}</td>
+        <td class="nowrap">{{ st.lfd|cu_day }}</td>
+        <td><span class="badge {{ st|cu_tone }}">{{ st.text }}</span></td>
+        <td class="num">{% if st.accrued %}{{ st.accrued|money:st.daily_currency }}<span class="sub">{{ st.daily|money:st.daily_currency }} a day</span>{% elif st.daily %}{{ st.daily|money:st.daily_currency }} a day{% else %}<span class="muted">No rate on file</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">{% icon "check" %}<h3>Nothing due soon</h3><p class="muted">No container's last free day is within {{ lead_days }} day{{ lead_days|pluralize }}.</p></div>
+  {% endif %}
+</section>
+{% endif %}

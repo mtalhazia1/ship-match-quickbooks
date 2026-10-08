@@ -1,0 +1,19 @@
+{% load static %}{# Evidence viewer (PDF.js). Hidden until static/js/evidence.js has loaded PDF.js; the iframe above stays the fallback. #}
+<div class="ev-viewer" data-evidence-viewer hidden
+     data-pdfjs="{% static 'vendor/pdfjs/pdf.min.mjs' %}"
+     data-pdfjs-worker="{% static 'vendor/pdfjs/pdf.worker.min.mjs' %}">
+  <div class="ev-bar" role="toolbar" aria-label="Document controls">
+    <div class="ev-tools" data-ev-tools>
+      <button class="btn btn-sm btn-quiet ev-icon" type="button" data-ev-zoom="out" aria-label="Zoom out" title="Zoom out"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+      <button class="btn btn-sm btn-quiet ev-zoom-level" type="button" data-ev-zoom="fit" title="Fit to the width of the pane"><span data-ev-zoom-label>Fit width</span></button>
+      <button class="btn btn-sm btn-quiet ev-icon" type="button" data-ev-zoom="in" aria-label="Zoom in" title="Zoom in"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+      <span class="ev-sep" aria-hidden="true"></span>
+      <button class="btn btn-sm btn-quiet ev-icon" type="button" data-ev-page="prev" aria-label="Previous page" title="Previous page"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <span class="ev-pageno">Page <span data-ev-current>1</span> of <span data-ev-count>1</span></span>
+      <button class="btn btn-sm btn-quiet ev-icon" type="button" data-ev-page="next" aria-label="Next page" title="Next page"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
+    <p class="ev-status" data-ev-status>Click a value on the left to see where it was read.</p>
+  </div>
+  <div class="ev-scroll" data-ev-scroll tabindex="0" role="region" aria-label="Document pages"></div>
+  <p class="sr-only" aria-live="polite" data-ev-live></p>
+</div>

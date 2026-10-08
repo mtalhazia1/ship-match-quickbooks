@@ -1,0 +1,20 @@
+<div class="page-head">
+  <div>
+    <h1>Settings</h1>
+    <p class="lede">Controls and connections for {{ org.name }}. Every change is recorded in the audit log.</p>
+  </div>
+</div>
+<nav class="subnav" aria-label="Settings sections">
+  <a href="{% url 'core:settings' %}" class="{% if request.resolver_match.url_name == 'settings' and request.resolver_match.namespace == 'core' %}on{% endif %}">Organization</a>
+  <a href="{% url 'accounting:settings' org.pk %}" class="{% if request.resolver_match.namespace == 'accounting' %}on{% endif %}">Accounting</a>
+  <a href="{% url 'mailboxes:index' %}" class="{% if request.resolver_match.namespace == 'mailboxes' %}on{% endif %}">Email intake</a>
+  <a href="{% url 'core:api_keys' %}" class="{% if request.resolver_match.url_name == 'api_keys' %}on{% endif %}">API keys</a>
+  <a href="{% url 'disputes:settings' %}" class="{% if request.resolver_match.namespace == 'disputes' %}on{% endif %}">Disputes</a>
+  <a href="{% url 'workflow:assignment_settings' %}" class="{% if request.resolver_match.view_name == 'workflow:assignment_settings' %}on{% endif %}">Assignment</a>
+  <a href="{% url 'notifications:settings' %}" class="{% if request.resolver_match.namespace == 'notifications' %}on{% endif %}">Alerts</a>
+  <a href="{% url 'learning:settings' %}" class="{% if request.resolver_match.namespace == 'learning' %}on{% endif %}">Vendor learning</a>
+  <a href="{% url 'landed:settings' %}" class="{% if request.resolver_match.namespace == 'landed' %}on{% endif %}">Landed cost</a>
+  <a href="{% url 'customs:settings' %}" class="{% if request.resolver_match.namespace == 'customs' %}on{% endif %}">Customs</a>
+  <a href="{% url 'close:settings' %}" class="{% if request.resolver_match.namespace == 'close' %}on{% endif %}">Month-end</a>
+  {% include "billing/_settings_nav.html" %}
+</nav>

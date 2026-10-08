@@ -1,0 +1,55 @@
+{% load ui workflow_tags %}{% wf_comments shipment=shipment document=doc as wc %}{% if wc %}
+<section class="card wf-comments" id="comments" aria-labelledby="wf-comments-title">
+  <div class="card-head">
+    <div><h2 id="wf-comments-title">Comments{% if wc.count %} <span class="muted num">{{ wc.count }}</span>{% endif %}</h2>
+      <p>Ask a teammate with @ and their name; they get a notification. You can change your own comment for {{ wc.edit_minutes }} minutes.</p></div>
+  </div>
+  {% if wc.threads %}
+  <ol class="wf-threads">
+    {% for t in wc.threads %}
+    <li class="wf-thread">
+      {% include "workflow/_comment.html" with c=t.comment html=t.html top=True %}
+      {% if t.replies %}
+      <ol class="wf-replies">
+        {% for r in t.replies %}<li>{% include "workflow/_comment.html" with c=r.comment html=r.html top=False %}</li>{% endfor %}
+      </ol>
+      {% endif %}
+      {% if wc.can_comment and not t.comment.is_deleted %}
+      <details class="reveal wf-reply" data-focus>
+        <summary class="link-btn small">Reply</summary>
+        <form class="wf-comment-form" method="post" action="{% url 'workflow:comment_create' %}">{% csrf_token %}
+          <input type="hidden" name="next" value="{{ wc.next }}">
+          <input type="hidden" name="parent" value="{{ t.comment.pk }}">
+          <input type="hidden" name="target" value="{% if t.comment.document_id %}document:{{ t.comment.document_id }}{% else %}shipment:{{ t.comment.shipment_id }}{% endif %}">
+          <label class="sr-only" for="wf-reply-{{ t.comment.pk }}">Reply to {{ t.comment.author|display_name }}</label>
+          <textarea id="wf-reply-{{ t.comment.pk }}" name="body" rows="2" maxlength="4000" required data-wf-mentions="{{ wc.members_url }}" placeholder="Reply. Type @ to mention someone."></textarea>
+          <div><button class="btn btn-sm btn-primary" type="submit">Reply</button></div>
+        </form>
+      </details>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="wf-empty">No comments yet.{% if wc.can_comment %} Start the conversation below.{% endif %}</p>
+  {% endif %}
+  {% if wc.can_comment %}
+  <form class="wf-comment-form wf-new" method="post" action="{% url 'workflow:comment_create' %}">{% csrf_token %}
+    <input type="hidden" name="next" value="{{ wc.next }}">
+    <label class="lbl" for="wf-new-comment">Add a comment</label>
+    <textarea id="wf-new-comment" name="body" rows="3" maxlength="4000" required data-wf-mentions="{{ wc.members_url }}" placeholder="For example: the fuel surcharge isn’t on the quote. Type @ and a name to ask a teammate to confirm it was agreed.">{{ wc.draft }}</textarea>
+    <div class="inline-form">
+      {% if wc.targets|length > 1 %}
+      <label class="lbl" for="wf-comment-target">About</label>
+      <select id="wf-comment-target" name="target">
+        {% for value, label in wc.targets %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      </select>
+      {% else %}<input type="hidden" name="target" value="{{ wc.targets.0.0 }}">{% endif %}
+      <button class="btn btn-primary" type="submit">{% icon "message" %} Post comment</button>
+    </div>
+  </form>
+  {% else %}
+  <p class="wf-empty small">Your role can read comments but not write them.</p>
+  {% endif %}
+</section>
+{% endif %}

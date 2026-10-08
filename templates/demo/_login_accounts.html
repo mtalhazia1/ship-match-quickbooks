@@ -1,0 +1,20 @@
+{% load static %}{% if demo_mode and demo_accounts %}
+<section class="demo-accounts" aria-labelledby="demo-accounts-title">
+  <h2 id="demo-accounts-title">Demo accounts</h2>
+  <p class="small muted">Each account shows what one role can do. Everyone shares them, and the data resets every night.</p>
+  <ul>
+    {% for a in demo_accounts %}
+    <li>
+      <div class="who-demo">
+        <strong>{{ a.name }}</strong>{% if a.role != a.name %} <span class="badge role">{{ a.role }}</span>{% endif %}
+        <span class="sub">{{ a.tip }}</span>
+        <span class="sub">Username <code>{{ a.username }}</code>, password <code>{{ a.password }}</code></span>
+      </div>
+      <button class="btn btn-sm" type="button" data-demo-username="{{ a.username }}" data-demo-password="{{ a.password }}">Use this account</button>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if try_enabled %}<p class="small"><a href="{% url 'demo:try' %}">Or try it on one of your own invoices without signing in</a></p>{% endif %}
+</section>
+<script src="{% static 'js/demo.js' %}" defer></script>
+{% endif %}

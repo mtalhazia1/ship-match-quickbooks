@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% load ui landed_tags %}
+{% block title %}Landed cost by product{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Landed cost by product</h1>
+    <p class="lede">What each product cost once freight, duties, insurance and handling were added, shipment by shipment. {% if period == "all" %}All shipments{% else %}{{ r.start|date:"j M Y" }} to {{ r.end|date:"j M Y" }}{% endif %}, by the date of the supplier's invoice. Amounts in {{ r.currency }}.</p>
+  </div>
+  <div class="actions">
+    <a class="btn" href="{% url 'landed:report_export' 'csv' %}{% if query %}?{{ query }}{% endif %}">{% icon "download" %} CSV</a>
+    <a class="btn" href="{% url 'landed:report_export' 'xlsx' %}{% if query %}?{{ query }}{% endif %}">{% icon "download" %} Excel</a>
+    {% if can.manage %}<a class="btn btn-quiet" href="{% url 'landed:settings' %}">{% icon "sliders" %} Settings</a>{% endif %}
+  </div>
+</div>
+
+<div class="period-bar">
+  <nav class="tabs" aria-label="Period">
+    {% for key, name in periods %}{% if key != "custom" %}<a href="?period={{ key }}{% if include_open %}&amp;open=1{% endif %}{% if q %}&amp;q={{ q|urlencode }}{% endif %}" class="{% if period == key %}on{% endif %}"{% if period == key %} aria-current="page"{% endif %}>{{ name }}</a>{% endif %}{% endfor %}
+  </nav>
+  <form class="inline-form" method="get">
+    <input type="hidden" name="period" value="custom">
+    {% if include_open %}<input type="hidden" name="open" value="1">{% endif %}
+    <label class="small muted" for="from">From</label><input id="from" type="date" name="from" value="{{ r.start|date:'Y-m-d' }}" required>
+    <label class="small muted" for="to">To</label><input id="to" type="date" name="to" value="{{ r.end|date:'Y-m-d' }}" required>
+    <button class="btn" type="submit">Show</button>
+  </form>
+</div>
+
+<form class="filters" method="get">
+  <input type="hidden" name="period" value="{{ period }}">
+  {% if period == "custom" %}<input type="hidden" name="from" value="{{ r.start|date:'Y-m-d' }}"><input type="hidden" name="to" value="{{ r.end|date:'Y-m-d' }}">{% endif %}
+  <label class="sr-only" for="lc-q">Search products</label>
+  <input id="lc-q" type="search" name="q" value="{{ q }}" placeholder="Search SKU, product, supplier or HS code">
+  <label class="check small"><input type="checkbox" name="open" value="1"{% if include_open %} checked{% endif %} data-autosubmit><span>Include shipments still in review</span></label>
+  <button class="btn" type="submit">Filter</button>
+</form>
+
+<div class="kpis">
+  <div class="kpi"><div class="k">Products</div><div class="v">{{ r.rows|length }}</div><div class="d">With at least one shipment in the period</div></div>
+  <div class="kpi"><div class="k">Shipments</div><div class="v">{{ r.shipments }}</div><div class="d">{% if r.in_review %}{{ r.in_review }} still in review{% else %}Approved or posted{% endif %}</div></div>
+  <div class="kpi kpi-money"><div class="k">Landed cost</div><div class="v"><span class="cur">{{ r.currency }}</span> {{ r.landed_total|floatformat:"0g" }}</div><div class="d">Goods and every charge on them</div></div>
+  <div class="kpi"><div class="k">Uplift on goods</div><div class="v">{{ r.uplift|pct }}</div><div class="d">Charges as a share of the goods value</div></div>
+</div>
+
+{% if r.incomplete or r.not_frozen_yet or r.other_currency %}
+<div class="decision blocked lc-report-notes">{% icon "info" %}<div class="grow small">
+  {% if r.incomplete %}<div>Not included: {{ r.incomplete|join:", " }} {% if r.incomplete|length == 1 %}has{% else %}have{% endif %} no landed cost (no commercial invoice lines, or no exchange rate when approved).</div>{% endif %}
+  {% if r.not_frozen_yet %}<div>{{ r.not_frozen_yet }} more approved shipment{{ r.not_frozen_yet|pluralize }} will be added the next time this page opens.</div>{% endif %}
+  {% if r.other_currency %}<div>{{ r.other_currency }} shipment{{ r.other_currency|pluralize }} approved while the home currency was different {% if r.other_currency == 1 %}is{% else %}are{% endif %} left out.</div>{% endif %}
+</div></div>
+{% endif %}
+
+<section class="card">
+  {% if r.rows %}
+  <div class="table-wrap">
+    <table class="data lc-report">
+      <thead><tr>
+        <th>Product</th><th class="num">Shipments</th><th class="num">Quantity</th><th class="num">Average per unit</th>
+        <th class="num">Last per unit</th><th class="num">Change</th><th>Trend</th><th class="num">Uplift</th><th class="num">Landed cost</th>
+      </tr></thead>
+      <tbody>
+      {% for row in r.rows %}
+        <tr>
+          <td class="lc-prod"><strong>{{ row.description }}</strong>
+            <span class="sub">{% if row.sku %}SKU {{ row.sku }}, {% endif %}{{ row.vendor_name|default:"Supplier unknown" }}</span>
+            <details class="lc-points">
+              <summary class="small">By shipment</summary>
+              <table class="data compact">
+                <thead><tr><th>Date</th><th>Shipment</th><th class="num">Qty</th><th class="num">Goods per unit</th><th class="num">Landed per unit</th></tr></thead>
+                <tbody>{% for pt in row.points %}<tr>
+                  <td class="nowrap">{{ pt.as_of|date:"j M Y" }}</td>
+                  <td><a href="{% url 'review:shipment' pt.shipment_id %}#landed-cost">{{ pt.reference }}</a>{% if pt.in_review %} <span class="tag warning">In review</span>{% endif %}</td>
+                  <td class="num">{{ pt.quantity|qty }}</td>
+                  <td class="num">{% if pt.quantity %}{{ pt.goods|lc_div:pt.quantity|unit_money }}{% else %}–{% endif %}</td>
+                  <td class="num">{{ pt.per_unit|unit_money }}</td></tr>{% endfor %}</tbody>
+              </table>
+            </details>
+          </td>
+          <td class="num">{{ row.points|length }}</td>
+          <td class="num">{{ row.quantity|qty }}</td>
+          <td class="num">{{ row.average|unit_money }}</td>
+          <td class="num">{% if row.last %}{{ row.last.per_unit|unit_money }}<span class="sub">{{ row.last.as_of|date:"j M Y" }}</span>{% else %}–{% endif %}</td>
+          <td class="num nowrap">{% if row.change is None %}<span class="muted">–</span>{% elif row.change > 0 %}<span class="lc-up">Up {{ row.change }}%</span>{% elif row.change < 0 %}<span class="lc-down">Down {{ row.change|lc_abs }}%</span>{% else %}Same{% endif %}</td>
+          <td>{% if row.spark %}<svg class="lc-spark" viewBox="0 0 100 28" preserveAspectRatio="none" role="img" aria-label="Landed cost per unit over the last {{ row.counted|length }} shipments"><polyline points="{{ row.spark }}"/></svg>{% else %}<span class="small muted">One shipment</span>{% endif %}</td>
+          <td class="num">{{ row.uplift|pct }}</td>
+          <td class="num">{{ row.landed_total|money }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">{% icon "container" %}<h3>No landed costs in this period</h3>
+    <p class="muted">Landed cost is recorded when a shipment with a commercial invoice is approved. {% if not include_open %}Tick “Include shipments still in review” to see the ones not approved yet.{% endif %}</p></div>
+  {% endif %}
+</section>
+{% endblock %}

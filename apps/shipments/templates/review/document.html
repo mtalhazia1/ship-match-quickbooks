@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% load ui review_tags evidence_tags %}
+{% block title %}{{ doc.original_filename }}{% endblock %}
+{% block scripts %}{% include "evidence/_scripts.html" %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'review:documents' %}">Documents</a>{% icon "chevron-right" %}<span>{{ doc.original_filename }}</span></div>
+    <div class="actions" style="gap:12px"><h1>{{ doc.original_filename }}</h1>
+      {% if doc.status == 'error' %}<span class="badge err">Couldn't read</span>{% elif doc.status == 'received' %}<span class="badge neutral">Processing</span>{% else %}<span class="badge warn">{{ doc.get_status_display }}</span>{% endif %}</div>
+    <dl class="meta-grid">
+      <div><dt>Type</dt><dd>{{ doc.get_doc_type_display }}</dd></div>
+      <div><dt>Received</dt><dd>{{ doc.received_at|date:"j M Y, H:i" }}</dd></div>
+      <div><dt>Source</dt><dd>{{ doc.get_source_display }}{% if doc.email %} from {{ doc.email.sender }}{% endif %}</dd></div>
+      <div><dt>Pages</dt><dd>{{ doc.page_count|default:"–" }}</dd></div>
+    </dl>
+    {% include "intake/_origin.html" with d=doc %}
+  </div>
+</div>
+
+<div class="decision blocked">{% icon "alert" %}
+  <div class="grow">
+    <strong>This document isn't in a shipment yet.</strong>
+    {% if doc.status == 'needs_ocr' %}It is a scanned image, so its text couldn't be read. Type the B/L, container or PO number below, or ask your administrator to turn on reading of scans and photos, then process it again.
+    {% elif doc.status == 'error' %}It couldn't be processed. {{ doc.error|doc_error|truncatechars:240 }}
+    {% elif doc.status == 'received' %}It is being read now. Refresh in a few seconds.
+    {% else %}No bill of lading, container or PO number was found that links it to a shipment. Add one below, or put it in a shipment by hand.{% endif %}
+  </div>
+</div>
+
+<div class="review-grid">
+  <div class="stack">
+    {% include "learning/_doc_note.html" with d=doc %}
+    <section class="card">
+      <div class="card-head"><div><h2>Shipment keys</h2><p>Saving any of these matches the document automatically.</p></div></div>
+      <div class="card-body">
+        <table class="fields">
+          {% for r in key_rows %}
+          <tr class="f-{{ r.field|conf_class }}" data-evidence-field="{{ r.name }}">
+            <td class="k"><span class="conf {{ r.field|conf_class }}"></span>{{ r.name|label }}</td>
+            <td>{% if can.edit %}
+              <form method="post" action="{% url 'review:update_field' doc.pk %}">{% csrf_token %}
+                <input type="hidden" name="name" value="{{ r.name }}">
+                <label class="sr-only" for="k-{{ r.name }}">{{ r.name|label }}</label>
+                <input id="k-{{ r.name }}" type="text" name="value" value="{{ r.field.value|as_input }}" placeholder="Type and press Enter" data-autosubmit autocomplete="off">
+              </form>{% else %}<span class="v">{{ r.field.value|show }}</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+      {% if can.edit %}
+      <div class="doc-foot">
+        <form class="inline-form" method="post" action="{% url 'review:set_type' doc.pk %}">{% csrf_token %}
+          <label class="lbl" for="doc-type">Document type</label>
+          <select id="doc-type" name="doc_type" data-autosubmit>
+            {% for key, name in doc_types %}<option value="{{ key }}"{% if key == doc.doc_type %} selected{% endif %}>{{ name }}</option>{% endfor %}
+          </select>
+        </form>
+        <form class="inline-form" method="post" action="{% url 'review:move_document' doc.pk %}">{% csrf_token %}
+          <label class="lbl" for="target">Or put it in</label>
+          <select id="target" name="target">
+            <option value="new">A new shipment</option>
+            {% for s in shipments %}<option value="{{ s.pk }}">{{ s.reference }}, B/L {{ s.bl_number|default:"none" }}</option>{% endfor %}
+          </select>
+          <button class="btn btn-primary btn-sm" type="submit">Assign</button>
+        </form>
+      </div>
+      {% endif %}
+    </section>
+
+    {% if other_rows %}
+    <section class="card">
+      <div class="card-head"><h2>Other extracted values</h2></div>
+      <div class="card-body">
+        <table class="fields">
+          {% for r in other_rows %}
+          <tr class="f-{{ r.field|conf_class }}" data-evidence-field="{{ r.name }}"><td class="k"><span class="conf {{ r.field|conf_class }}"></span>{{ r.name|label }}</td>
+            <td>{% if can.edit %}
+              <form method="post" action="{% url 'review:update_field' doc.pk %}">{% csrf_token %}
+                <input type="hidden" name="name" value="{{ r.name }}">
+                <label class="sr-only" for="o-{{ r.name }}">{{ r.name|label }}</label>
+                <input id="o-{{ r.name }}" type="text" name="value" value="{{ r.field.value|as_input }}" data-autosubmit autocomplete="off">
+              </form>{% else %}<span class="v">{{ r.field.value|show }}</span>{% endif %}</td></tr>
+          {% endfor %}
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
+    {% include "mailboxes/_email_source.html" with doc=doc %}
+
+    {% include "workflow/_comments.html" %}
+
+    <section class="card">
+      <div class="card-head"><h2>Activity</h2></div>
+      {% if timeline %}
+      <ol class="timeline">{% for e in timeline %}<li><div><strong>{{ e.who }}</strong> {{ e.text }}</div><div class="when">{{ e.at|date:"j M Y, H:i" }}</div></li>{% endfor %}</ol>
+      {% else %}<div class="card-body muted">No activity yet.</div>{% endif %}
+    </section>
+  </div>
+  <aside class="viewer" aria-label="Source document">
+    <div class="viewer-head"><strong>{{ doc.original_filename }}</strong>
+      <a class="btn btn-sm btn-quiet" href="{% url 'review:document_file' doc.pk %}" target="_blank" rel="noopener">{% icon "external" %} Open</a></div>
+    <iframe title="Source document" src="{% url 'review:document_file' doc.pk %}"></iframe>
+    {% evidence_data doc %}{% include "evidence/_viewer.html" %}
+  </aside>
+</div>
+{% endblock %}

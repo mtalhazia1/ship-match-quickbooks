@@ -1,0 +1,5 @@
+{% load ui workflow_tags %}{% wf_nav as wfn %}{% if wfn.multi_org %}
+    <nav class="nav wf-firm" aria-label="All your clients">
+      <a href="{% url 'workflow:portfolio' %}" class="{% if section == 'clients' %}on{% endif %}">{% icon "briefcase" %} All clients</a>
+      <a href="{% url 'workflow:my_work' %}" class="{% if section == 'my_work' %}on{% endif %}">{% icon "user-check" %} My work across clients</a>
+    </nav>{% endif %}

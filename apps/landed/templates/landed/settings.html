@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% load ui landed_tags %}
+{% block title %}Landed cost settings{% endblock %}
+{% block content %}
+{% include "settings/_nav.html" %}
+<form method="post" class="stack lc-settings">
+  {% csrf_token %}
+  <section class="card">
+    <div class="card-head"><div><h2>Landed cost</h2>
+      <p>How freight, duties, insurance and other charges are spread over the products on a shipment's commercial invoices. Reviewers can choose differently for one shipment. Approved shipments keep the landed cost worked out when they were approved.</p></div></div>
+    <div class="card-body stack">
+      <div class="form-grid lc-grid">
+        <div><label class="lbl" for="method">Spread charges</label>
+          <select class="w-full" id="method" name="method">{% for key, name in methods %}<option value="{{ key }}"{% if key == current.method %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></div>
+      </div>
+      <p class="hint" style="margin-top:-8px">By value suits most goods. By weight or volume suits freight on heavy or bulky goods, when the commercial invoice prints weights or volumes per line.</p>
+      <fieldset class="plain-fieldset">
+        <legend class="lbl">For a type of charge</legend>
+        <p class="hint" style="margin-top:0">For example freight by volume and duties by value. Default uses the choice above, unless the charge's source suggests a basis (customs duties are assessed on value).</p>
+        <div class="form-grid lc-grid">
+          {% for cat, name in categories %}
+          <div><label class="lbl" for="cat-{{ cat }}">{{ name }}</label>
+            <select class="w-full" id="cat-{{ cat }}" name="cat_{{ cat }}"><option value="">Default</option>{% for key, mname in methods %}<option value="{{ key }}"{% if current.by_category|lookup:cat == key %} selected{% endif %}>{{ mname }}</option>{% endfor %}</select></div>
+          {% endfor %}
+        </div>
+      </fieldset>
+      <div class="lc-note small">{% icon "info" %}<span>Now: charges are spread {{ policy.describe }}. When a product has no weight or volume, value is used for that charge and the shipment page says so.</span></div>
+    </div>
+  </section>
+  <div><button class="btn btn-primary" type="submit">Save settings</button></div>
+</form>
+{% endblock %}

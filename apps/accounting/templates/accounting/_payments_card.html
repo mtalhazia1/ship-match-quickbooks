@@ -1,0 +1,16 @@
+{% load ui %}{# Settings > Accounting: when payment status was last read. #}
+<section class="card">
+  <div class="card-head"><div><h2>Payment status</h2><p>ShipMatch reads whether posted bills are paid {% if sync_hours == 1 %}every hour{% else %}every {{ sync_hours }} hours{% endif %}.</p></div></div>
+  <div class="card-body small">
+    {% if sync.last_finished_at %}<p>Last checked {{ sync.last_finished_at|timesince }} ago{% if sync.last_summary.checked %}: {{ sync.last_summary.checked }} bill{{ sync.last_summary.checked|pluralize }}{% endif %}.</p>
+    {% else %}<p class="muted">Not checked yet.</p>{% endif %}
+    {% if sync.paused_until %}<p class="pay-warn">{% icon "clock" %}<span>Paused until {{ sync.paused_until|date:"j M, H:i" }}: {{ sync.last_error }}</span></p>
+    {% elif sync.last_error %}<p class="pay-warn">{% icon "alert" %}<span>{{ sync.last_error }}</span></p>{% endif %}
+    {% if can.post and active and not active.needs_reconnect %}
+    <form method="post" action="{% url 'accounting:check_payments' %}">{% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <button class="btn btn-sm" type="submit">{% icon "refresh" %} Check payments now</button>
+    </form>
+    {% endif %}
+  </div>
+</section>

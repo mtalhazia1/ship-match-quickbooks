@@ -1,0 +1,69 @@
+{% extends "demo/public_base.html" %}
+{% load ui %}
+{% block title %}Create your account{% endblock %}
+{% block content %}
+<div class="try-hero">
+  <h1>Start checking freight invoices before you pay them</h1>
+  <p class="lede">Create an account for your company.{% if billing %} The first {{ trial_days }} days are free, no card needed.{% endif %} You'll confirm your email, then you're in.</p>
+</div>
+
+{% if error %}<ul class="flash" role="alert"><li class="error">{% icon "alert-circle" %}<span>{{ error }}</span></li></ul>{% endif %}
+
+<div class="try-grid">
+  <section class="card">
+    <div class="card-head"><div><h2>Your company and you</h2><p>You'll be the admin. You can invite your team afterwards.</p></div></div>
+    <div class="card-body">
+      <form method="post" class="stack pf-signup-form" novalidate>
+        {% csrf_token %}
+        <div class="field{% if errors.company_name %} has-error{% endif %}">
+          <label class="lbl" for="company_name">Company name</label>
+          <input class="w-full" id="company_name" type="text" name="company_name" value="{{ form.company_name }}" maxlength="200" autocomplete="organization" required{% if errors.company_name %} aria-invalid="true" aria-describedby="company_name-error"{% endif %}>
+          {% if errors.company_name %}<p class="errorlist" id="company_name-error">{{ errors.company_name }}</p>{% endif %}
+        </div>
+        <div class="field{% if errors.full_name %} has-error{% endif %}">
+          <label class="lbl" for="full_name">Your name</label>
+          <input class="w-full" id="full_name" type="text" name="full_name" value="{{ form.full_name }}" maxlength="150" autocomplete="name" required{% if errors.full_name %} aria-invalid="true" aria-describedby="full_name-error"{% endif %}>
+          {% if errors.full_name %}<p class="errorlist" id="full_name-error">{{ errors.full_name }}</p>{% endif %}
+        </div>
+        <div class="field{% if errors.email %} has-error{% endif %}">
+          <label class="lbl" for="email">Work email</label>
+          <input class="w-full" id="email" type="email" name="email" value="{{ form.email }}" maxlength="254" autocomplete="email" autocapitalize="none" required{% if errors.email %} aria-invalid="true" aria-describedby="email-error"{% endif %}>
+          {% if errors.email %}<p class="errorlist" id="email-error">{{ errors.email }}</p>{% else %}<p class="hint">You'll sign in with this address. We send the confirmation link here.</p>{% endif %}
+        </div>
+        <div class="field{% if errors.password %} has-error{% endif %}">
+          <label class="lbl" for="password">Password</label>
+          <input class="w-full" id="password" type="password" name="password" autocomplete="new-password" required aria-describedby="password-help{% if errors.password %} password-error{% endif %}"{% if errors.password %} aria-invalid="true"{% endif %}>
+          {% if errors.password %}<p class="errorlist" id="password-error">{{ errors.password }}</p>{% endif %}
+          <p class="hint" id="password-help">At least 12 characters. Not a common password, not only numbers, and not like your name or email.</p>
+        </div>
+        <div class="try-hp" aria-hidden="true">
+          <label for="hp-{{ honeypot }}">Leave this field empty</label>
+          <input id="hp-{{ honeypot }}" type="text" name="{{ honeypot }}" value="" tabindex="-1" autocomplete="off">
+        </div>
+        <div class="actions"><button class="btn btn-primary" type="submit">Create account</button>
+          <span class="small muted">Already have one? <a href="{% url 'accounts:login' %}">Sign in</a></span></div>
+      </form>
+    </div>
+  </section>
+
+  <aside class="stack">
+    <section class="card">
+      <div class="card-head"><h2>{% icon "check" %} What you get</h2></div>
+      <div class="card-body">
+        <ul class="try-list">
+          <li>Bills of lading, commercial and freight invoices read as they arrive, by upload or email.</li>
+          <li>Each invoice matched to its shipment and checked: totals, container numbers, duplicates, agreed rates.</li>
+          <li>Approved bills posted to QuickBooks with the invoice PDF attached.</li>
+          {% if billing %}<li>{{ trial_days }} days free. Choose a plan when you're ready; nothing is charged before.</li>{% endif %}
+        </ul>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>{% icon "lock" %} Your data</h2></div>
+      <div class="card-body">
+        <p class="small">Each company's documents are kept apart and only your team can see them. Every change is recorded in an audit log.</p>
+      </div>
+    </section>
+  </aside>
+</div>
+{% endblock %}

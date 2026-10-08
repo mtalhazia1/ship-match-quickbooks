@@ -1,0 +1,13 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["*/migrations/*", "datasets", "media", "staticfiles"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "DJ"]
+# E501: long lines are allowed where splitting hurts readability (templates of messages, SQL-ish filters)
+# B008: Django Ninja uses File(...) defaults by design
+ignore = ["E501", "DJ001", "DJ008", "DJ012", "B008", "B904", "B905", "UP017", "UP045"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["apps", "config", "synthetic"]

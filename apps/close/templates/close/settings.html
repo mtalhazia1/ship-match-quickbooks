@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Month-end settings{% endblock %}
+{% block content %}
+{% include "settings/_nav.html" %}
+<form method="post" class="stack fluid close-settings" novalidate>{% csrf_token %}
+  <section class="card">
+    <div class="card-head"><div><h2>Accounts for the accrual entry</h2><p>Each line is debited to its vendor's account when one is set (Settings &gt; QuickBooks, or on an invoice); otherwise to these.</p></div></div>
+    <div class="card-body form-grid">
+      {% for f in form %}{% if f.name in "accrued_account accrued_account_id freight_account goods_account" %}
+      <div class="field{% if f.errors %} has-error{% endif %}">
+        <label class="lbl" for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}
+        {% if f.help_text %}<p class="hint">{{ f.help_text }}</p>{% endif %}{{ f.errors }}
+      </div>
+      {% endif %}{% endfor %}
+      <div class="field span-2"><label class="check" for="{{ form.include_goods.id_for_label }}">{{ form.include_goods }}<span>{{ form.include_goods.label }}<span class="hint" style="display:block">Commercial invoices from suppliers, debited to the goods account. Freight is always accrued.</span></span></label></div>
+    </div>
+  </section>
+  <section class="card">
+    <div class="card-head"><div><h2>Charges every shipment should carry</h2><p>A shipment that shipped but hasn't been billed for one of these gets an estimate.</p></div></div>
+    <div class="card-body form-grid">
+      {% for f in form %}{% if f.name in "expect_freight expect_destination expect_delivery" %}
+      <div class="field{% if f.errors %} has-error{% endif %}">
+        <label class="lbl" for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}{{ f.errors }}
+      </div>
+      {% endif %}{% endfor %}
+    </div>
+    <p class="card-body small muted close-card-note">“When most similar shipments have it” expects a charge when at least half of your past shipments to the same port of discharge were billed for it (or half of all shipments, while a port has too few).</p>
+  </section>
+  <section class="card">
+    <div class="card-head"><div><h2>Estimates</h2></div></div>
+    <div class="card-body form-grid">
+      {% for f in form %}{% if f.name in "lookback_days min_history" %}
+      <div class="field{% if f.errors %} has-error{% endif %}">
+        <label class="lbl" for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}
+        {% if f.help_text %}<p class="hint">{{ f.help_text }}</p>{% endif %}{{ f.errors }}
+      </div>
+      {% endif %}{% endfor %}
+    </div>
+  </section>
+  <div class="actions"><button class="btn btn-primary" type="submit">Save settings</button>
+    <a class="btn btn-quiet" href="{% url 'close:accruals' %}">Back to Month-end</a></div>
+</form>
+{% endblock %}

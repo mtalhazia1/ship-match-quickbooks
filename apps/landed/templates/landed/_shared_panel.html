@@ -1,0 +1,165 @@
+{% load static ui landed_tags %}{% shared_panel shipment user as sp %}
+{% if sp.items or sp.startable %}
+<section class="card lc-shared" id="shared-invoices">
+  <div class="card-head">
+    <div><h2>Shared invoices</h2>
+      <p>One forwarder invoice that covers several shipments. Each shipment carries its share; the invoice is posted once, with the shipment it was matched to, after every shipment with a share is approved.</p></div>
+  </div>
+
+  {% for it in sp.items %}
+  <div class="lc-si" id="shared-{{ it.doc.pk }}">
+    {% if it.dismissed %}
+      <div class="lc-si-head">
+        <div><strong>Invoice {{ it.number }}</strong><span class="sub">{{ it.vendor|default:"Vendor name missing" }}, {{ it.total|money:it.currency }}</span></div>
+        <span class="badge neutral">Not shared</span>
+      </div>
+      <p class="small muted">{{ it.si.updated_by|display_name }} kept the whole invoice on {{ it.primary.reference }}{% if it.si.note %}: “{{ it.si.note }}”{% endif %}</p>
+      {% if it.can_edit %}
+      <form method="post" action="{% url 'landed:split_reset' it.doc.pk %}">{% csrf_token %}
+        <input type="hidden" name="next" value="{% url 'review:shipment' shipment.pk %}#shared-invoices">
+        <button class="btn btn-sm" type="submit">{% icon "refresh" %} Look for a split again</button>
+      </form>
+      {% endif %}
+    {% elif it.locked_only %}
+      <div class="lc-si-head">
+        <div><strong>Invoice {{ it.number }}</strong><span class="sub">{{ it.vendor|default:"Vendor name missing" }}, {{ it.total|money:it.currency }}</span></div>
+        <span class="badge warn">Names an approved shipment</span>
+      </div>
+      <p class="small">It also names {% for l in it.locked_only %}<a href="{% url 'review:shipment' l.id %}">{{ l.reference }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}, already approved, so the whole invoice stays on this shipment. Reopen that shipment to give it a share.</p>
+    {% else %}
+      <div class="lc-si-head">
+        <div class="lc-si-title">
+          <strong>Invoice {{ it.number }}</strong>
+          <span class="sub">{{ it.vendor|default:"Vendor name missing" }}{% if it.is_primary %}, matched to this shipment{% else %}, matched to <a href="{% url 'review:shipment' it.primary.pk %}#shared-{{ it.doc.pk }}">{{ it.primary.reference }}</a>{% endif %}</span>
+        </div>
+        {% if not it.adds_up %}<span class="badge err">Doesn't add up</span>
+        {% elif it.confirmed %}<span class="badge ok" title="{{ it.si.confirmed_by|display_name }}, {{ it.si.confirmed_at|date:'j M Y, H:i' }}">Confirmed</span>
+        {% else %}<span class="badge warn">Not confirmed</span>{% endif %}
+      </div>
+
+      {% if it.mine %}
+      <p class="lc-share">Shared invoice: your share <strong class="num">{{ it.mine.row.amount|money:it.currency }}</strong> of <span class="num">{{ it.total|money:it.currency }}</span>{% if it.mine.pct is not None %} <span class="muted">({{ it.mine.pct|pct }})</span>{% endif %}</p>
+      {% endif %}
+      <p class="small muted lc-si-with">Also covers {% for o in it.others %}<a href="{% url 'review:shipment' o.shipment.pk %}">{{ o.shipment.reference }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}. Split {{ it.basis_label|lower }}{% if it.confirmed %}, confirmed by {{ it.si.confirmed_by|display_name }} on {{ it.si.confirmed_at|date:"j M Y" }}{% endif %}.</p>
+
+      <div class="table-wrap">
+        <table class="data compact lc-split">
+          <thead><tr><th>Shipment</th><th>Named on the invoice</th><th>Status</th><th class="num">Share</th><th class="num">Part</th></tr></thead>
+          <tbody>
+          {% for t in it.rows %}
+            <tr class="{% if t.is_current %}lc-current{% endif %}">
+              <td><a class="row-link" href="{% url 'review:shipment' t.shipment.pk %}">{{ t.shipment.reference }}</a>
+                <span class="sub">{% if t.is_current %}This shipment{% if t.is_primary %}, the invoice is here{% endif %}{% elif t.is_primary %}The invoice is here{% else %}B/L {{ t.shipment.bl_number|default:"not received" }}{% endif %}</span></td>
+              <td class="small">{% if t.refs %}{{ t.refs|join:", " }}{% else %}<span class="muted">Added by a reviewer</span>{% endif %}</td>
+              <td>{% include "includes/status.html" with s=t.shipment %}</td>
+              <td class="num">{{ t.row.amount|money:t.row.currency }}</td>
+              <td class="num muted">{{ t.pct|pct }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+          {% if not it.adds_up %}<tfoot><tr><td colspan="3"><strong>Shares add up to</strong></td><td class="num"><strong>{{ it.assigned|money:it.currency }}</strong></td><td class="num small">of {{ it.total|money:it.currency }}</td></tr></tfoot>{% endif %}
+        </table>
+      </div>
+
+      {% if it.invoice_errors %}<p class="lc-note small lc-warn">{% icon "alert" %}<span>The invoice has {{ it.invoice_errors }} open error{{ it.invoice_errors|pluralize }} on <a href="{% url 'review:shipment' it.primary.pk %}#issues">{{ it.primary.reference }}</a>, where it is checked and posted.</span></p>{% endif %}
+      {% for n in it.notes %}<p class="lc-note small">{% icon "info" %}<span>{{ n }}</span></p>{% endfor %}
+      {% if it.unshared %}<p class="lc-note small lc-warn">{% icon "alert" %}<span>The invoice also names {% for s in it.unshared %}{{ s.reference }}{% if not forloop.last %}, {% endif %}{% endfor %}, which has no share in this split.</span></p>{% endif %}
+
+      {% if it.frozen %}
+        <p class="lc-note small">{% icon "lock" %}<span>Locked: {% for s in it.frozen %}{{ s.reference }}{% if not forloop.last %}, {% endif %}{% endfor %} {% if it.frozen|length == 1 %}is{% else %}are{% endif %} approved. Reopen to change the split.</span></p>
+      {% elif it.can_edit %}
+      <div class="actions lc-si-actions">
+        {% if it.adds_up and not it.confirmed %}
+        <form method="post" action="{% url 'landed:split_confirm' it.doc.pk %}">{% csrf_token %}
+          <input type="hidden" name="next" value="{% url 'review:shipment' shipment.pk %}#shared-invoices">
+          <button class="btn btn-primary btn-sm" type="submit">{% icon "check" %} Confirm split</button>
+        </form>
+        {% endif %}
+        <details class="reveal lc-edit" data-focus{% if not it.adds_up %} open{% endif %}>
+          <summary class="btn btn-sm">Change the split</summary>
+          <form class="pop-form lc-split-form" method="post" action="{% url 'landed:split_save' it.doc.pk %}" data-lc-split data-total="{{ it.total|stringformat:'s' }}" data-currency="{{ it.currency }}">{% csrf_token %}
+            <input type="hidden" name="next" value="{% url 'review:shipment' shipment.pk %}#shared-invoices">
+            <fieldset class="plain-fieldset">
+              <legend class="lbl">Split the {{ it.total|money:it.currency }}</legend>
+              <div class="lc-bases">
+              {% for key, name in sp.choices %}
+                <label class="check"><input type="radio" name="basis" value="{{ key }}"{% if key == it.basis %} checked{% endif %}><span>{{ name }}</span></label>
+              {% endfor %}
+              </div>
+            </fieldset>
+            <div class="table-wrap">
+              <table class="data compact lc-amounts">
+                <thead><tr><th>Shipment</th><th class="num">Amount ({{ it.currency }})</th><th><span class="sr-only">Remove</span></th></tr></thead>
+                <tbody>
+                {% for t in it.rows %}
+                  <tr>
+                    <td>{{ t.shipment.reference }}</td>
+                    <td class="num"><label class="sr-only" for="amt-{{ it.doc.pk }}-{{ t.shipment.pk }}">Share for {{ t.shipment.reference }}</label>
+                      <input id="amt-{{ it.doc.pk }}-{{ t.shipment.pk }}" class="lc-amount" type="text" inputmode="decimal" name="amount_{{ t.shipment.pk }}" value="{{ t.row.amount|stringformat:'s' }}" size="10" autocomplete="off" data-lc-amount></td>
+                    <td>{% if not t.is_primary %}<label class="check remove small"><input type="checkbox" name="remove" value="{{ t.shipment.pk }}"> Remove</label>{% endif %}</td>
+                  </tr>
+                {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <p class="hint" data-lc-left>Typed amounts are used with “Amounts I type” and must add up to {{ it.total|money:it.currency }}.</p>
+            {% if it.candidates %}
+            <div>
+              <label class="lbl" for="add-{{ it.doc.pk }}">Add a shipment the invoice covers</label>
+              <select id="add-{{ it.doc.pk }}" name="add">
+                <option value="">None</option>
+                {% for c in it.candidates %}<option value="{{ c.pk }}">{{ c.reference }}, B/L {{ c.bl_number|default:"none" }}</option>{% endfor %}
+              </select>
+              <p class="hint">Its share is worked out with the split you choose above. For typed amounts, save once, then type its amount.</p>
+            </div>
+            {% endif %}
+            <div><button class="btn btn-primary btn-sm" type="submit">Save and confirm split</button></div>
+          </form>
+        </details>
+        <details class="reveal popover" data-focus data-menu>
+          <summary class="btn btn-sm btn-quiet">Not a shared invoice</summary>
+          <form class="pop-form" method="post" action="{% url 'landed:split_dismiss' it.doc.pk %}">{% csrf_token %}
+            <input type="hidden" name="next" value="{% url 'review:shipment' shipment.pk %}#shared-invoices">
+            <p class="small">The whole invoice stays on {{ it.primary.reference }} and the other shipments lose their shares.</p>
+            <label class="lbl" for="dismiss-{{ it.doc.pk }}">Why isn't it shared? Kept in the audit log.</label>
+            <textarea id="dismiss-{{ it.doc.pk }}" name="note" minlength="5" maxlength="500" required placeholder="For example: the other B/L is only quoted for reference; the forwarder bills it separately."></textarea>
+            <div><button class="btn btn-primary btn-sm" type="submit">Keep the whole invoice here</button></div>
+          </form>
+        </details>
+        {% if it.basis == "manual" %}
+        <form method="post" action="{% url 'landed:split_reset' it.doc.pk %}">{% csrf_token %}
+          <input type="hidden" name="next" value="{% url 'review:shipment' shipment.pk %}#shared-invoices">
+          <button class="btn btn-sm btn-quiet" type="submit">{% icon "refresh" %} Back to the automatic split</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endif %}
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {% if sp.startable %}
+  <details class="lc-start">
+    <summary>Does an invoice on this shipment cover other shipments too?</summary>
+    <form class="lc-start-form" method="post" action="{% url 'landed:split_start' shipment.pk %}">{% csrf_token %}
+      <div class="form-grid">
+        <div><label class="lbl" for="start-invoice">Invoice</label>
+          <select class="w-full" id="start-invoice" name="invoice">{% for d, number in sp.startable %}<option value="{{ d.pk }}">{{ number }}</option>{% endfor %}</select></div>
+        <div><label class="lbl" for="start-basis">Split</label>
+          <select class="w-full" id="start-basis" name="basis">{% for key, name in sp.choices %}{% if key != "manual" %}<option value="{{ key }}"{% if key == "containers" %} selected{% endif %}>{{ name }}</option>{% endif %}{% endfor %}</select></div>
+      </div>
+      {% if sp.candidates %}
+      <fieldset class="plain-fieldset">
+        <legend class="lbl">Other shipments it covers</legend>
+        <div class="lc-pick">
+          {% for c in sp.candidates %}<label class="check small"><input type="checkbox" name="add" value="{{ c.pk }}"><span>{{ c.reference }}<span class="sub">B/L {{ c.bl_number|default:"none" }}{% if c.container_numbers %}, {{ c.container_numbers|length }} container{{ c.container_numbers|length|pluralize }}{% endif %}</span></span></label>{% endfor %}
+        </div>
+      </fieldset>
+      <div><button class="btn btn-sm" type="submit">Split the invoice</button> <span class="small muted">You can check and change the shares afterwards.</span></div>
+      {% else %}<p class="small muted">There are no other open shipments to share it with.</p>{% endif %}
+    </form>
+  </details>
+  {% endif %}
+</section>
+<script src="{% static 'js/landed.js' %}" defer></script>
+{% endif %}

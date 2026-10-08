@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% load ui static %}
+{% block title %}{% if extra %}Edit approved charge{% else %}Approve an extra charge{% endif %}{% endblock %}
+{% block scripts %}<script src="{% static 'js/rates.js' %}" defer></script>{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'rates:list' %}">Rates</a>{% icon "chevron-right" %}<a href="{% url 'rates:extras' %}">Approved extra charges</a>{% icon "chevron-right" %}<span>{% if extra %}Edit{% else %}New{% endif %}</span></div>
+    <h1>{% if extra %}{{ extra.code_label }} for {{ extra.vendor_name }}{% else %}Approve an extra charge{% endif %}</h1>
+    <p class="lede">The vendor may bill this charge within these limits. A line above the limit is flagged with the difference; a line the limits can't be checked for is flagged for a person to look at.</p>
+  </div>
+</div>
+<form method="post" class="stack" style="max-width:900px" novalidate>
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="flash"><li class="error">{{ form.non_field_errors|join:" " }}</li></div>{% endif %}
+  <section class="card">
+    <div class="card-body form-grid">
+      {% include "rates/_field.html" with field=form.vendor_name %}
+      {% include "rates/_field.html" with field=form.code %}
+      {% include "rates/_field.html" with field=form.unit hint="Days for detention, demurrage, storage and per diem; hours for waiting time" %}
+      {% include "rates/_field.html" with field=form.free_units hint="Free days or hours before the charge starts, e.g. 4" %}
+      {% include "rates/_field.html" with field=form.max_per_unit hint="Empty means no per-day cap" %}
+      {% include "rates/_field.html" with field=form.max_amount hint="Empty means no total cap" %}
+      {% include "rates/_field.html" with field=form.currency %}
+      {% include "rates/_field.html" with field=form.valid_from hint="Empty means from any date" %}
+      {% include "rates/_field.html" with field=form.valid_to hint="Empty means no end date" %}
+      {% include "rates/_field.html" with field=form.notes wide=True %}
+    </div>
+    <div class="card-body small muted" style="border-top:1px solid var(--line)">
+      How a line is checked: ShipMatch reads the days or hours on the line (“Detention 6 days”), takes off the free time, and multiplies by the most per day. A line that says its days are already chargeable (“3 chargeable days”) has no free time taken off again.
+    </div>
+  </section>
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">{% icon "check" %} Save</button>
+    <a class="btn btn-quiet" href="{% url 'rates:extras' %}">Cancel</a>
+  </div>
+</form>
+<datalist id="vendor-names">{% for n in vendor_names %}<option value="{{ n }}">{% endfor %}</datalist>
+{{ units|json_script:"accessorial-units" }}
+{% endblock %}

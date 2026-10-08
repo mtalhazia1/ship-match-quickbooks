@@ -1,0 +1,5 @@
+{% load accounting_tags %}{% payment_filters as choices %}
+<label class="sr-only" for="pay-filter">Payment status</label>
+<select id="pay-filter" name="pay" data-autosubmit>
+  {% for key, name in choices %}<option value="{{ key }}"{% if key == request.GET.pay %} selected{% endif %}>{{ name }}</option>{% endfor %}
+</select>

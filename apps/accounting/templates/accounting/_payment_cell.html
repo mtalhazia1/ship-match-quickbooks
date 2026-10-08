@@ -1,0 +1,1 @@
+{% load accounting_tags %}{% payment_cell s page as pay %}<td class="nowrap">{% if pay %}<span class="badge {{ pay.tone }}"{% if pay.count > 1 %} title="Worst of {{ pay.count }} bills"{% endif %}>{{ pay.label }}</span>{% else %}<span class="muted small">–</span>{% endif %}</td>

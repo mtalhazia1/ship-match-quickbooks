@@ -1,0 +1,83 @@
+{% load ui customs_tags %}{% customs_for shipment as cu %}
+{% if cu.entries %}
+<section class="card cu-panel" id="customs" aria-labelledby="cu-duty-title">
+  <div class="card-head"><div><h2 id="cu-duty-title">Customs duty</h2>
+    <p>Every line is recalculated from its rate and entered value, the fees are checked against the limits in force on the entry date, and the entered value against the commercial invoices.</p></div></div>
+  {% for e in cu.entries %}
+  <div class="cu-entry">
+    <div class="cu-entry-head">
+      <div class="cu-entry-who">
+        <strong>Entry <span class="mono">{{ e.number }}</span></strong>
+        <span class="sub">{% if e.date %}Entered {{ e.date|cu_day }}{% endif %}{% if e.port %}{% if e.date %}, {% endif %}port {{ e.port }}{% endif %}{% if e.lines %}{% if e.date or e.port %}, {% endif %}{{ e.lines }} tariff line{{ e.lines|pluralize }}{% endif %}</span>
+      </div>
+      <div class="actions">
+        {% if e.at_risk %}<span class="badge err">Overpaid {{ e.at_risk|money:e.currency }}</span>{% else %}<span class="badge ok">No overpayment found</span>{% endif %}
+        <a class="btn btn-sm btn-quiet" href="#doc-{{ e.doc.pk }}">Show the entry</a>
+      </div>
+    </div>
+    <dl class="cu-figures">
+      {% for f in e.figures %}
+      <div class="cu-fig{% if f.state %} is-{{ f.state }}{% endif %}">
+        <dt>{{ f.label }}</dt>
+        <dd class="cu-amount num">{{ f.amount|money:e.currency }}</dd>
+        {% if f.note %}<dd class="cu-note">{% if f.state == "ok" %}{% icon "check" %}{% elif f.state %}{% icon "alert" %}{% endif %}<span>{{ f.note }}</span></dd>{% endif %}
+      </div>
+      {% endfor %}
+    </dl>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+{% if cu.rows %}
+<section class="card cu-panel" id="free-time" aria-labelledby="cu-ft-title">
+  <div class="card-head">
+    <div><h2 id="cu-ft-title">Free time</h2>
+      <p>Last free days from the arrival notice. Today is {{ cu.today|cu_day }} in {{ cu.timezone }}; alerts go out {{ cu.lead_days }} day{{ cu.lead_days|pluralize }} before.</p></div>
+    {% if can.manage %}<a class="btn btn-sm" href="{% url 'customs:settings' %}">{% icon "sliders" %} Free time settings</a>{% endif %}
+  </div>
+  <div class="table-wrap">
+    <table class="data cu-ft">
+      <thead><tr>
+        <th>Container</th><th>Discharged</th><th>Pick up by</th><th>Return empty by</th><th>Picked up</th><th>Returned empty</th>
+        {% if can.edit %}<th><span class="sr-only">Save dates</span></th>{% endif %}
+      </tr></thead>
+      <tbody>
+      {% for row, st in cu.rows %}
+      <tr class="cu-tone-{{ st.tone }}">
+        <td><strong class="mono">{{ row.container_number }}</strong><span class="sub">{{ row.terminal|default:row.carrier_name|default:"Terminal not printed" }}</span></td>
+        <td class="nowrap">{{ row.discharge_date|cu_day }}{% if row.discharge_estimated %}<span class="sub">Estimated from the ETA</span>{% endif %}</td>
+        <td>
+          <span class="nowrap">{{ row.lfd_demurrage|cu_day }}</span>
+          {% if st.stage == "demurrage" and st.lfd %}<span class="badge {{ st|cu_tone }} cu-count">{{ st.text }}</span>{% endif %}
+          <span class="sub">{% if row.lfd_demurrage_printed %}Printed on the notice{% elif row.demurrage_free_days is not None %}{{ row.demurrage_free_days }} free day{{ row.demurrage_free_days|pluralize }} after discharge{% else %}No free days printed{% endif %}</span>
+          {% if st.stage == "demurrage" and st.daily %}<span class="sub cu-cost">{% if st.accrued %}About {{ st.accrued|money:st.daily_currency }} so far, {% else %}After that about {% endif %}{{ st.daily|money:st.daily_currency }} a day ({{ st.daily_source }})</span>{% endif %}
+        </td>
+        <td>
+          <span class="nowrap">{% if row.lfd_detention %}{{ row.lfd_detention|cu_day }}{% elif row.detention_free_days is not None and not row.picked_up_on %}{{ row.detention_free_days }} day{{ row.detention_free_days|pluralize }} from pickup{% else %}–{% endif %}</span>
+          {% if st.stage == "detention" and st.lfd %}<span class="badge {{ st|cu_tone }} cu-count">{{ st.text }}</span>{% elif st.stage == "closed" %}<span class="badge ok cu-count">{{ st.text }}</span>{% endif %}
+          {% if row.lfd_detention_printed %}<span class="sub">Printed on the notice</span>{% elif row.lfd_detention %}<span class="sub">{{ row.detention_free_days }} free day{{ row.detention_free_days|pluralize }} after {% if row.detention_from == "discharge" %}discharge{% else %}pickup{% endif %}</span>{% endif %}
+          {% if st.stage == "detention" and st.daily %}<span class="sub cu-cost">{% if st.accrued %}About {{ st.accrued|money:st.daily_currency }} so far, {% else %}After that about {% endif %}{{ st.daily|money:st.daily_currency }} a day ({{ st.daily_source }})</span>{% endif %}
+        </td>
+        {% if can.edit %}
+        <td><label class="sr-only" for="cu-pu-{{ row.pk }}">Date {{ row.container_number }} was picked up</label>
+          <input class="cu-date" id="cu-pu-{{ row.pk }}" type="date" name="picked_up_on" form="cu-f-{{ row.pk }}" value="{{ row.picked_up_on|date:'Y-m-d' }}" max="{{ cu.today|date:'Y-m-d' }}"></td>
+        <td><label class="sr-only" for="cu-rt-{{ row.pk }}">Date the empty {{ row.container_number }} was returned</label>
+          <input class="cu-date" id="cu-rt-{{ row.pk }}" type="date" name="returned_on" form="cu-f-{{ row.pk }}" value="{{ row.returned_on|date:'Y-m-d' }}" max="{{ cu.today|date:'Y-m-d' }}"></td>
+        <td><form id="cu-f-{{ row.pk }}" method="post" action="{% url 'customs:set_dates' row.pk %}">{% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.path }}#free-time">
+          <button class="btn btn-sm" type="submit">Save</button></form></td>
+        {% else %}
+        <td class="nowrap">{{ row.picked_up_on|cu_day }}</td>
+        <td class="nowrap">{% if row.returned_on %}{{ row.returned_on|cu_day }}{% else %}–{% endif %}</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="cu-foot small muted">
+    {% for note in cu.basis_notes %}<p>Free days counted in {{ note }}.</p>{% endfor %}
+    <p>Enter the date a container left the terminal and the date the empty went back; demurrage stops at pickup and detention at the return. Changes are kept in the audit log.</p>
+  </div>
+</section>
+{% endif %}

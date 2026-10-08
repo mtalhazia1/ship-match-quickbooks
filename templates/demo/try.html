@@ -1,0 +1,60 @@
+{% extends "demo/public_base.html" %}
+{% load ui %}
+{% block title %}Try it on your invoice{% endblock %}
+{% block content %}
+<div class="try-hero">
+  <h1>See ShipMatch read one of your documents</h1>
+  <p class="lede">Upload a freight invoice, a commercial invoice or a bill of lading. In a few seconds you'll see what ShipMatch reads from it, what kind of document it is, and the checks it runs before anyone pays.</p>
+</div>
+
+{% if error %}<ul class="flash" role="alert"><li class="error">{% icon "alert-circle" %}<span>{{ error }}</span></li></ul>{% endif %}
+
+<div class="try-grid">
+  <section class="card">
+    <div class="card-head"><div><h2>Upload a document</h2><p>One PDF, up to {{ max_mb }} MB and {{ max_pages }} pages.</p></div></div>
+    <div class="card-body">
+      <form method="post" enctype="multipart/form-data" class="stack" novalidate>
+        {% csrf_token %}
+        <div class="dropzone try-drop" data-dropzone>
+          {% icon "upload" %}
+          <div class="grow">
+            <strong>Drop your PDF here or choose it</strong>
+            <span class="small muted" data-file-status></span>
+          </div>
+          <label class="sr-only" for="try-file">PDF file</label>
+          <input id="try-file" type="file" name="file" accept="application/pdf,.pdf" required>
+        </div>
+        <div class="try-hp" aria-hidden="true">
+          <label for="hp-{{ honeypot }}">Leave this field empty</label>
+          <input id="hp-{{ honeypot }}" type="text" name="{{ honeypot }}" value="" tabindex="-1" autocomplete="off">
+        </div>
+        <div class="actions"><button class="btn btn-primary" type="submit">{% icon "eye" %} Read my document</button></div>
+      </form>
+    </div>
+  </section>
+
+  <aside class="stack">
+    <section class="card try-privacy">
+      <div class="card-head"><h2>{% icon "lock" %} Your document stays private</h2></div>
+      <div class="card-body">
+        <ul class="try-list">
+          <li>It is read in a sandbox of its own, never added to a customer account and never shown to other visitors.</li>
+          <li>Only you can open the result, through a private link that is not listed anywhere.</li>
+          <li>The file and everything read from it are deleted automatically after {{ retention_hours }} hours. You can delete them sooner from the result page.</li>
+          {% if ai_reading %}<li>The document is sent to this server's AI provider to be read.</li>{% else %}<li>On this server it is read by ShipMatch's own rules, without an AI service.</li>{% endif %}
+        </ul>
+        <p class="small muted">Please remove bank details or anything else you don't want to share before uploading.</p>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>What you'll see</h2></div>
+      <div class="card-body">
+        <ul class="try-list">
+          <li>The document type and every value read, such as vendor, invoice number, dates, containers, PO numbers and totals.</li>
+          <li>Checks a bookkeeper would run: missing values, totals that don't add up, container numbers with a typo.</li>
+        </ul>
+      </div>
+    </section>
+  </aside>
+</div>
+{% endblock %}

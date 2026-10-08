@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+{% include "settings/_nav.html" %}
+<form method="post" class="stack" style="max-width:860px">
+  {% csrf_token %}
+  <section class="card">
+    <div class="card-head"><div><h2>Organization</h2><p>Name, currency and the time zone used when a person's own zone is unknown.</p></div></div>
+    <div class="card-body form-grid">
+      <div><label class="lbl" for="name">Name</label><input class="w-full" id="name" type="text" name="name" value="{{ org.name }}" maxlength="200" required></div>
+      <div><label class="lbl" for="home_currency">Home currency</label><input id="home_currency" type="text" name="home_currency" value="{{ org.home_currency }}" maxlength="3" size="5" required>
+        <p class="hint">Three-letter code. Approval limits and totals use it.</p></div>
+      <div><label class="lbl" for="timezone">Time zone</label>
+        <select class="w-full" id="timezone" name="timezone">{% for z in zones %}<option value="{{ z }}"{% if z == org.timezone %} selected{% endif %}>{{ z }}</option>{% endfor %}<option value="UTC"{% if org.timezone == "UTC" %} selected{% endif %}>UTC</option></select></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><div><h2>Approval controls</h2><p>Who may sign off, and when the system asks a person to look.</p></div></div>
+    <div class="card-body stack">
+      <label class="check"><input type="checkbox" name="maker_checker"{% if org.maker_checker %} checked{% endif %}>
+        <span><strong>Maker-checker</strong><span class="sub">A person who uploaded, corrected, moved or accepted issues on a shipment can't approve it. Recommended for audits (segregation of duties).</span></span></label>
+      <label class="check"><input type="checkbox" name="require_mfa"{% if org.require_mfa %} checked{% endif %}>
+        <span><strong>Require two-factor authentication</strong><span class="sub">Members without it are sent to set it up before they can continue.</span></span></label>
+      <div class="form-grid">
+        <div><label class="lbl" for="review_threshold">Review threshold</label>
+          <input id="review_threshold" type="number" name="review_threshold" min="0.5" max="1" step="0.01" value="{{ org.review_threshold|default_if_none:'' }}" placeholder="0.85">
+          <p class="hint">Values read with lower confidence are flagged for a person to check. Empty uses the default (0.85).</p></div>
+        <div><label class="lbl" for="fx_rates">Exchange rates to {{ org.home_currency }}</label>
+          <input class="w-full" id="fx_rates" type="text" name="fx_rates" value="{{ rates_text }}" placeholder="EUR=1.08, GBP=1.27">
+          <p class="hint">Value of one unit in {{ org.home_currency }}. Used to check approval limits on foreign-currency invoices. Without a rate, only approvers with no limit can approve.</p></div>
+      </div>
+    </div>
+  </section>
+  <div><button class="btn btn-primary" type="submit">Save settings</button></div>
+</form>
+{% endblock %}

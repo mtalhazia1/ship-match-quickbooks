@@ -1,0 +1,2 @@
+{% load billing_tags %}{% billing_enabled as billing_on %}{% if billing_on %}<a href="{% url 'billing:settings' %}" class="{% if request.resolver_match.namespace == 'billing' %}on{% endif %}">Billing</a>{% endif %}
+<a href="{% url 'integrations:webhooks' %}" class="{% if request.resolver_match.namespace == 'integrations' and 'webhook' in request.resolver_match.url_name %}on{% endif %}">Webhooks</a>

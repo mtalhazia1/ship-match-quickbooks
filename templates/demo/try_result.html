@@ -1,0 +1,108 @@
+{% extends "demo/public_base.html" %}
+{% load ui review_tags %}
+{% block title %}{% if processing %}Reading your document{% else %}What ShipMatch read{% endif %}{% endblock %}
+{% block head %}{% if processing %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'demo:try' %}">Try it on your invoice</a>{% icon "chevron-right" %}<span>Result</span></div>
+    <h1>{% if processing %}Reading {{ sub.filename }}{% else %}{{ sub.filename }}{% endif %}</h1>
+    {% if not processing %}
+    <dl class="meta-grid">
+      <div><dt>Document type</dt><dd>{{ doc.get_doc_type_display }}{% if doc.classification_confidence %} <span class="muted small">({% widthratio doc.classification_confidence 1 100 %}% sure)</span>{% endif %}</dd></div>
+      <div><dt>Pages</dt><dd>{{ sub.page_count }}</dd></div>
+      <div><dt>Values read</dt><dd>{{ found }} of {{ rows|length }}</dd></div>
+      <div><dt>Deleted automatically</dt><dd>{{ sub.expires_at|date:"j M Y, H:i" }}</dd></div>
+    </dl>
+    {% endif %}
+  </div>
+</div>
+
+{% if processing %}
+<section class="card"><div class="empty">{% icon "clock" %}<h3>Reading your document</h3>
+  <p class="muted">This usually takes a few seconds. The page refreshes by itself.</p></div></section>
+{% else %}
+
+{% if doc.status == "needs_ocr" %}
+<div class="decision blocked">{% icon "alert" %}<div class="grow"><strong>This PDF is a scanned image.</strong> This demo server reads PDFs with a text layer; scans need OCR, which ShipMatch supports in a full setup. Try a PDF that was created from your accounting or shipping system.</div></div>
+{% elif doc.status == "error" %}
+<div class="decision rejected">{% icon "alert-circle" %}<div class="grow"><strong>We couldn't read this document.</strong> Try another PDF, or contact us and we'll look at it with you.</div></div>
+{% elif not readable %}
+<div class="decision blocked">{% icon "alert" %}<div class="grow"><strong>This doesn't look like an invoice or a bill of lading.</strong> ShipMatch reads commercial invoices, freight invoices and bills of lading. Try one of those.</div></div>
+{% elif errors %}
+<div class="decision rejected">{% icon "alert-circle" %}<div class="grow"><strong>{{ errors }} problem{{ errors|pluralize }} would stop this invoice from being paid as it is.</strong> In ShipMatch a reviewer fixes the value or an approver overrides it with a reason, and the decision is kept in the audit log.</div></div>
+{% elif issues %}
+<div class="decision blocked">{% icon "alert" %}<div class="grow"><strong>Read, with {{ issues|length }} thing{{ issues|length|pluralize }} to confirm.</strong> A reviewer would check {{ issues|length|pluralize:"it,them" }} against the PDF before approving.</div></div>
+{% else %}
+<div class="decision done">{% icon "check" %}<div class="grow"><strong>Read cleanly.</strong> Every check passed. In ShipMatch this document would be matched to its shipment and be ready to approve.</div></div>
+{% endif %}
+
+<div class="try-grid">
+  <div class="stack">
+    {% if issues %}
+    <section class="card">
+      <div class="card-head"><div><h2>Checks that need attention <span class="muted num">{{ issues|length }}</span></h2><p>The same checks run on every document in ShipMatch, before anyone pays.</p></div></div>
+      {% for i in issues %}
+      <div class="issue">
+        <span class="sev tag {{ i.severity }}">{% if i.severity == "error" %}{% icon "alert-circle" %} Error{% else %}{% icon "alert" %} Warning{% endif %}</span>
+        <div>
+          <h4>{{ i.title }}</h4>
+          <p>{{ i.message }}</p>
+          {% if i.guidance %}<p class="guide">{{ i.guidance }}</p>{% endif %}
+          {% if i.amount_at_risk %}<p class="small">Money at risk: {{ i.amount_at_risk|money:i.currency }}</p>{% endif %}
+        </div>
+        <div></div>
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+    {% if readable %}
+    <section class="card">
+      <div class="card-head"><div><h2>Values read</h2><p>Green values were found word for word in the document. Amber ones should be checked against the PDF.</p></div></div>
+      <div class="card-body">
+        <table class="fields try-fields">
+          {% for r in rows %}
+          <tr class="f-{{ r.state }}">
+            <td class="k"><span class="conf {{ r.state }}"></span>{{ r.name|label }}</td>
+            <td><span class="v">{% if r.state == "missing" %}<span class="muted">Not found</span>{% else %}{{ r.value|show }}{% endif %}</span></td>
+          </tr>
+          {% endfor %}
+        </table>
+        {% if line_items %}
+        <div class="table-wrap lines">
+          <table class="data">
+            <thead><tr><th>Line</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Amount</th></tr></thead>
+            <tbody>{% for li in line_items %}<tr><td>{{ li.description }}</td><td class="num">{{ li.quantity|default:"" }}</td><td class="num">{{ li.unit_price|default:"" }}</td><td class="num">{{ li.amount }}</td></tr>{% endfor %}</tbody>
+          </table>
+        </div>
+        {% endif %}
+      </div>
+    </section>
+    {% endif %}
+
+  </div>
+
+  <aside class="stack">
+    <section class="card try-cta">
+      <div class="card-body">
+        <h2>Want this on every invoice?</h2>
+        <p>ShipMatch reads documents as they arrive by email, groups them into shipments, checks them against the bill of lading and posts approved bills to QuickBooks.</p>
+        <div class="actions">
+          {% if contact_url %}<a class="btn btn-primary" href="{{ contact_url }}" rel="noopener">Talk to us about your documents</a>{% endif %}
+          <a class="btn" href="{% url 'demo:try' %}">Try another document</a>
+        </div>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>{% icon "lock" %} Privacy</h2></div>
+      <div class="card-body">
+        <p class="small">This result is only reachable through this page's link. The file and everything read from it are deleted automatically on {{ sub.expires_at|date:"j M Y \a\t H:i" }}.</p>
+        <form method="post" action="{% url 'demo:try_delete' token %}">{% csrf_token %}
+          <button class="btn btn-danger btn-sm" type="submit">Delete my document now</button>
+        </form>
+      </div>
+    </section>
+  </aside>
+</div>
+{% endif %}
+{% endblock %}

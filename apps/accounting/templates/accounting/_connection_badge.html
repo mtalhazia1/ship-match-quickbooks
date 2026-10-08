@@ -1,0 +1,6 @@
+{# Dashboard: which accounting system bills post to. #}
+{% if qbo and qbo.needs_reconnect %}<span class="badge err">{{ qbo.system_name }} needs reconnecting</span>
+  {% if can.manage %}<a class="small" href="{% url 'accounting:settings' org.pk %}" style="margin-left:8px">Connect again</a>{% endif %}
+{% elif qbo %}<span class="badge ok">{{ qbo.system_name }} connected{% if qbo.company_name %}: {{ qbo.company_name }}{% endif %}</span>
+{% else %}<span class="badge neutral">No accounting system connected</span>
+  {% if can.manage %}<a class="small" href="{% url 'accounting:settings' org.pk %}" style="margin-left:8px">Connect QuickBooks or Xero</a>{% endif %}{% endif %}

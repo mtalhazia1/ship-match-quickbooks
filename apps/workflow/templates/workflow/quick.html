@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Approve {{ shipment.reference }}{% endblock %}
+{% block content %}
+<div class="wf-quick">
+  {% if via_link and shipment.is_locked or via_link and shipment.status == "rejected" %}
+  <div class="wf-banner" role="status">{% icon "info" %}<span>You were sent here to approve <strong>{{ shipment.reference }}</strong> ({{ shipment.organization.name }}). It has already been {% if shipment.status == "rejected" %}rejected{% else %}approved{% endif %}, so there is nothing to do.</span></div>
+  {% elif via_link %}
+  <div class="wf-banner" role="status">{% icon "info" %}<span>You were sent here to approve <strong>{{ shipment.reference }}</strong> ({{ shipment.organization.name }}). Check the totals, issues and documents, then approve or reject. Nothing happens until you press a button.</span></div>
+  {% elif link_expired %}
+  <div class="wf-banner warn" role="status">{% icon "clock" %}<span>The link you followed has expired, so it no longer pre-selects a shipment. This is {{ shipment.reference }}; check it is still the one you meant before deciding.</span></div>
+  {% endif %}
+
+  <div class="page-head">
+    <div>
+      <div class="crumbs"><a href="{% url 'review:queue' %}?status={{ shipment.status }}">Review queue</a>{% icon "chevron-right" %}<span>{{ shipment.reference }}</span></div>
+      <div class="actions" style="gap:12px"><h1>{{ shipment.reference }}</h1>{% include "includes/status.html" with s=shipment %}</div>
+      <dl class="meta-grid">
+        <div><dt>Client</dt><dd>{{ shipment.organization.name }}</dd></div>
+        <div><dt>Bill of lading</dt><dd>{{ shipment.bl_number|default:"Not received" }}</dd></div>
+        <div><dt>Assigned to</dt><dd>{% if assignee %}{% if assignee.pk == user.pk %}You{% else %}{{ assignee|display_name }}{% endif %}{% else %}Nobody{% endif %}</dd></div>
+      </dl>
+    </div>
+    <a class="btn" href="{% url 'review:shipment' shipment.pk %}">{% icon "eye" %} Full review</a>
+  </div>
+
+  <section class="card wf-total">
+    <div class="wf-total-main">
+      <div class="k">Payable total</div>
+      <div class="v num">{% for cur, amount in totals.by_currency.items %}<div>{{ amount|money:cur }}</div>{% empty %}–{% endfor %}</div>
+      {% if totals.home is not None and totals.by_currency|length > 1 %}<div class="d">{{ totals.home|money:shipment.organization.home_currency }} in total</div>{% endif %}
+      {% if totals.missing_rates %}<div class="d">No exchange rate for {{ totals.missing_rates|join:", " }}</div>{% endif %}
+    </div>
+    <dl class="wf-total-facts">
+      <div><dt>Documents</dt><dd>{{ docs|length }}</dd></div>
+      <div><dt>Open issues</dt><dd>{% if open_issues %}{{ open_issues|length }}{% if open_errors %} ({{ open_errors }} error{{ open_errors|pluralize }}){% endif %}{% else %}None{% endif %}</dd></div>
+      {% if totals.credits %}<div><dt>Credit notes</dt><dd>{% for cur, amount in totals.credits.items %}{{ amount|money:cur }}{% if not forloop.last %}, {% endif %}{% endfor %}</dd></div>{% endif %}
+      {% if can_approve %}<div><dt>Your approval limit</dt><dd>{% if limit is not None %}{{ limit|money:shipment.organization.home_currency }}{% else %}No limit{% endif %}</dd></div>{% endif %}
+    </dl>
+  </section>
+
+  {% if shipment.status == "approved" or shipment.status == "posted" %}
+  <div class="decision done">{% icon "check" %}<div class="grow"><strong>{% if shipment.status == "posted" %}Approved and posted.{% else %}Approved.{% endif %}</strong>
+    {% if shipment.approved_by %}{{ shipment.approved_by|display_name }}, {{ shipment.approved_at|date:"j M Y, H:i" }}.{% endif %} Nothing more to do here.</div></div>
+  {% elif shipment.status == "rejected" %}
+  <div class="decision rejected">{% icon "x" %}<div class="grow"><strong>Rejected.</strong>{% if decision %} {{ decision.user|display_name }}, {{ decision.created_at|date:"j M Y, H:i" }}: “{{ decision.note }}”{% endif %}</div></div>
+  {% elif not can_approve %}
+  <div class="decision blocked">{% icon "info" %}<div class="grow"><strong>Your role can't approve shipments.</strong> An approver or admin of {{ shipment.organization.name }} can.</div></div>
+  {% elif blockers %}
+  <div class="decision blocked">{% icon "alert" %}<div class="grow"><strong>You can't approve this yet</strong><ul>{% for b in blockers %}<li>{{ b }}</li>{% endfor %}</ul></div></div>
+  {% else %}
+  <div class="decision ready">{% icon "check" %}<div class="grow"><strong>Ready for your approval.</strong> All checks passed or were accepted. Approving locks the shipment and makes its bills ready to post.</div></div>
+  {% endif %}
+
+  {% if next_item %}
+  <p class="wf-next"><a class="btn btn-primary" href="{% url 'workflow:quick' next_item.pk %}">Next waiting for your approval: {{ next_item.reference }} {% icon "chevron-right" %}</a></p>
+  {% endif %}
+
+  {% if open_issues %}
+  <section class="card" aria-labelledby="wf-q-issues">
+    <div class="card-head"><h2 id="wf-q-issues">Open issues <span class="muted num">{{ open_issues|length }}</span></h2></div>
+    {% for i in open_issues %}
+    <div class="issue">
+      <span class="sev tag {{ i.severity }}">{% if i.severity == "error" %}{% icon "alert-circle" %} Error{% else %}{% icon "alert" %} Warning{% endif %}</span>
+      <div><h4>{{ i.title }}</h4><p>{{ i.message }}</p>{% if i.amount_at_risk %}<p class="small"><strong>{{ i.amount_at_risk|money:i.currency }}</strong> at risk</p>{% endif %}</div>
+      <div></div>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  <section class="card" aria-labelledby="wf-q-docs">
+    <div class="card-head"><h2 id="wf-q-docs">Documents <span class="muted num">{{ docs|length }}</span></h2></div>
+    <ul class="wf-doclist">
+      {% for item in docs %}{% with d=item.doc %}
+      <li>
+        <div class="wf-doc-main">
+          <strong>{{ d.get_doc_type_display }}</strong>
+          <span class="sub">{{ item.vendor|default:"Vendor not read" }}{% if item.number %}, {{ item.number }}{% endif %}</span>
+          <span class="sub wrap-any">{{ d.original_filename }}</span>
+        </div>
+        <div class="wf-doc-side">
+          {% if d.posts_to_accounting and item.amount is not None and item.amount != "" %}<span class="num"><strong>{% if d.is_credit %}–{% endif %}{{ item.amount|money:item.currency }}</strong></span>{% endif %}
+          <a class="btn btn-sm" href="{% url 'review:document_file' d.pk %}" target="_blank" rel="noopener">{% icon "external" %} PDF</a>
+        </div>
+      </li>
+      {% endwith %}{% empty %}<li class="muted">No documents.</li>{% endfor %}
+    </ul>
+  </section>
+
+  {% if can_approve and not shipment.is_locked and shipment.status != "rejected" %}
+  <div class="wf-actionbar" role="group" aria-label="Decision">
+    <details class="reveal wf-reject" data-focus>
+      <summary class="btn btn-danger">Reject</summary>
+      <form class="pop-form" method="post" action="{% url 'workflow:quick_reject' shipment.pk %}">{% csrf_token %}
+        {% if via_link %}<input type="hidden" name="via" value="link">{% endif %}
+        <label class="lbl" for="wf-reject-note">Reason for rejecting</label>
+        <textarea id="wf-reject-note" name="note" minlength="{{ reject_min }}" maxlength="500" required placeholder="For example: freight invoice billed for the wrong vessel; asked the forwarder for a corrected copy."></textarea>
+        <button class="btn btn-danger solid" type="submit">Reject shipment</button>
+      </form>
+    </details>
+    {% if blockers %}
+    <button class="btn btn-primary" type="button" disabled>{% icon "check" %} Approve</button>
+    {% else %}
+    <form method="post" action="{% url 'workflow:quick_approve' shipment.pk %}" data-wf-confirm="wf-approve-dialog">{% csrf_token %}
+      {% if via_link %}<input type="hidden" name="via" value="link">{% endif %}
+      <button class="btn btn-primary" type="submit">{% icon "check" %} Approve</button>
+    </form>
+    {% endif %}
+  </div>
+  {% url 'workflow:quick_approve' shipment.pk as quick_approve_url %}
+  {% include "workflow/_approve_dialog.html" with action_url=quick_approve_url %}
+  {% endif %}
+</div>
+{% endblock %}

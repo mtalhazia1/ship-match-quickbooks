@@ -1,0 +1,53 @@
+{% load ui %}{# Settings > Accounting: QuickBooks Online. #}
+<section class="card" id="quickbooks">
+  <div class="card-head"><div><h2>QuickBooks Online</h2><p>Approved invoices are posted as bills with the PDF attached. Posting never creates duplicates.</p></div>
+    {% if conn and not conn.needs_reconnect %}<span class="badge ok">Connected</span>{% elif conn %}<span class="badge err">Needs reconnecting</span>{% else %}<span class="badge neutral">Not connected</span>{% endif %}</div>
+  <div class="card-body">
+    {% if conn %}
+      <dl class="meta-grid" style="margin:0 0 16px">
+        <div><dt>Company</dt><dd>{{ conn.company_name|default:conn.realm_id }}</dd></div>
+        <div><dt>Environment</dt><dd>{{ environment|capfirst }}</dd></div>
+        <div><dt>Home currency</dt><dd>{{ conn.home_currency|default:"–" }}{% if conn.multicurrency %}, multicurrency on{% endif %}</dd></div>
+        <div><dt>Connected</dt><dd>{{ conn.connected_at|date:"j M Y" }}</dd></div>
+        {% if conn.refresh_expires_at %}<div><dt>Connection valid until</dt><dd>{{ conn.refresh_expires_at|date:"j M Y" }}</dd></div>{% endif %}
+      </dl>
+      {% if conn.home_currency and conn.home_currency != org.home_currency %}
+      <ul class="flash"><li class="warning">{% icon "alert" %}<span>QuickBooks uses {{ conn.home_currency }} but ShipMatch is set to {{ org.home_currency }}. Change the home currency in Settings &gt; Organization so totals and approval limits match.</span></li></ul>
+      {% endif %}
+      {% if error and active.system == "quickbooks" %}<ul class="flash"><li class="error">{% icon "alert-circle" %}<span>Couldn't load accounts from QuickBooks: {{ error|truncatechars:220 }}</span></li></ul>{% endif %}
+      {% if not conn.needs_reconnect %}
+      <form method="post" class="inline-form" action="{% url 'accounting:settings' org.pk %}">{% csrf_token %}
+        <label class="lbl" for="acct">Default expense account</label>
+        <select id="acct" name="default_expense_account_id">
+          <option value="">Choose an account</option>
+          {% if active.system == "quickbooks" %}{% for a in accounts %}<option value="{{ a.id }}"{% if a.id == conn.default_expense_account_id %} selected{% endif %}>{{ a.name }} ({{ a.type }})</option>{% endfor %}{% endif %}
+          {% if conn.default_expense_account_id and not accounts %}<option value="{{ conn.default_expense_account_id }}" selected>Account {{ conn.default_expense_account_id }}</option>{% endif %}
+        </select>
+        <button class="btn btn-primary btn-sm" type="submit">Save</button>
+      </form>
+      <p class="hint">Used when a vendor has no account rule of its own.</p>
+      {% endif %}
+      <div class="actions" style="margin-top:16px">
+        <a class="btn btn-sm" href="{% url 'accounting:connect' org.pk %}">Connect again</a>
+        <details class="reveal popover" data-menu style="display:inline-block">
+          <summary class="btn btn-danger btn-sm">Disconnect</summary>
+          <form class="pop-form" method="post" action="{% url 'accounting:disconnect' org.pk %}" style="left:0;right:auto">{% csrf_token %}
+            <p class="small">Intuit is told to cancel the connection. Approved shipments can't be posted until you connect again. Bills already in QuickBooks stay there.</p>
+            <button class="btn btn-sm btn-danger solid" type="submit">Disconnect QuickBooks</button>
+          </form>
+        </details>
+      </div>
+    {% elif configured %}
+      {% if active.system == "xero" %}
+      <p>Bills post to Xero. To post to QuickBooks Online instead, connect it here: Xero is disconnected once QuickBooks is connected. Bills already in Xero stay there, but their payments are no longer checked.</p>
+      <a class="btn" href="{% url 'accounting:connect' org.pk %}">Connect QuickBooks instead</a>
+      {% else %}
+      <p>Connect the QuickBooks Online company that should receive bills. You'll sign in to Intuit and choose the company{% if environment == "sandbox" %} (sandbox: use your Intuit developer sandbox company){% endif %}.</p>
+      <a class="btn btn-primary" href="{% url 'accounting:connect' org.pk %}">Connect QuickBooks</a>
+      {% endif %}
+    {% else %}
+      <p>QuickBooks isn't set up on this server yet. Create an app at developer.intuit.com, then add its keys to the <code>.env</code> file and restart ShipMatch:</p>
+      <div class="codes" style="grid-template-columns:1fr">QBO_CLIENT_ID=...<br>QBO_CLIENT_SECRET=...<br>QBO_ENVIRONMENT=sandbox</div>
+    {% endif %}
+  </div>
+</section>

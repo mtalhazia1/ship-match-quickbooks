@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% load ui rates_tags %}
+{% block title %}Savings{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Savings</h1>
+    <p class="lede">Money ShipMatch flagged on invoices before anyone paid, and what happened to it. {{ period_label }}, {{ start|date:"j M Y" }} to {{ end|date:"j M Y" }}. Amounts in {{ s.currency }}.</p>
+  </div>
+  <div class="actions">
+    <a class="btn" href="{% url 'savings:export' %}{% if query %}?{{ query }}{% endif %}">{% icon "download" %} Export CSV</a>
+    <a class="btn" href="{% url 'roi:calculator' %}">ROI calculator</a>
+  </div>
+</div>
+
+<div class="period-bar">
+  <nav class="tabs" aria-label="Period">
+    {% for key, name in periods %}{% if key != "custom" %}<a href="?period={{ key }}" class="{% if period == key %}on{% endif %}"{% if period == key %} aria-current="page"{% endif %}>{{ name }}</a>{% endif %}{% endfor %}
+  </nav>
+  <form class="inline-form" method="get">
+    <input type="hidden" name="period" value="custom">
+    <label class="small muted" for="from">From</label><input id="from" type="date" name="from" value="{{ start|date:'Y-m-d' }}" required>
+    <label class="small muted" for="to">To</label><input id="to" type="date" name="to" value="{{ end|date:'Y-m-d' }}" required>
+    <button class="btn" type="submit">Show</button>
+  </form>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><div class="k">Caught</div>
+    <div class="v"><span class="cur">{{ s.currency }}</span> {{ s.caught|whole }}</div>
+    <div class="d">{{ s.count }} charge{{ s.count|pluralize }} flagged before payment</div></div>
+  <div class="kpi kpi-ok"><div class="k">Prevented</div>
+    <div class="v"><span class="cur">{{ s.currency }}</span> {{ s.prevented|whole }}</div>
+    <div class="d">Not paid: shipment rejected or invoice corrected</div></div>
+  <a class="kpi{% if s.at_risk %} attention{% endif %}" href="{% url 'review:queue' %}?status=needs_review"><div class="k">Still at risk</div>
+    <div class="v"><span class="cur">{{ s.currency }}</span> {{ s.at_risk|whole }}</div>
+    <div class="d">{{ s.counts.at_risk }} open issue{{ s.counts.at_risk|pluralize }} waiting for a decision</div></a>
+  <div class="kpi"><div class="k">Accepted</div>
+    <div class="v"><span class="cur">{{ s.currency }}</span> {{ s.accepted|whole }}</div>
+    <div class="d">Paid as invoiced after review</div></div>
+  {% if s.recovery_sources %}
+  <div class="kpi kpi-ok"><div class="k">Recovered after payment</div>
+    <div class="v"><span class="cur">{{ s.currency }}</span> {{ s.recovered|whole }}</div>
+    <div class="d">Credits and refunds from disputes</div></div>
+  {% endif %}
+</div>
+
+{% if s.unconverted or s.counts.withdrawn or s.counts.overlap %}
+<div class="decision blocked" style="margin-bottom:16px">{% icon "info" %}<div class="grow small">
+  {% if s.unconverted %}<div>Not included above because there is no exchange rate in Settings: {% for cur, amount in s.unconverted.items %}{{ amount|money:cur }}{% if not forloop.last %}, {% endif %}{% endfor %}.</div>{% endif %}
+  {% if s.counts.withdrawn %}<div>{{ s.counts.withdrawn }} catch{{ s.counts.withdrawn|pluralize:"es" }} ({{ s.withdrawn|money:s.currency }}) went away after a quote or checking rule changed, so {{ s.counts.withdrawn|pluralize:"it isn't,they aren't" }} counted as savings.</div>{% endif %}
+  {% if s.counts.overlap %}<div>{{ s.counts.overlap }} catch{{ s.counts.overlap|pluralize:"es" }} flagged money already counted by another check on the same invoice, so {{ s.counts.overlap|pluralize:"it isn't,they aren't" }} added again.</div>{% endif %}
+</div></div>
+{% endif %}
+
+<div class="grid-2">
+  <section class="card">
+    <div class="card-head"><div><h2>By month</h2><p>{{ months_label }}, by the month each charge was first flagged</p></div></div>
+    <div class="card-body">
+      {% if months_max %}
+      <div class="vbars stacked" role="img" aria-label="Stacked bar chart of money caught per month, split into prevented, still at risk and accepted">
+        {% for m in months %}
+        <div class="vbar{% if not m.caught %} zero{% endif %}" title="{{ m.label }}: {{ m.caught|money:s.currency }} caught, {{ m.prevented|money:s.currency }} prevented, {{ m.at_risk|money:s.currency }} still at risk, {{ m.accepted|money:s.currency }} accepted">
+          <span class="vstack" style="height:{{ m.caught|pct_of:months_max|floatformat:2 }}%">
+            {% if m.prevented %}<i class="seg prevented" style="height:{{ m.prevented|pct_of:m.caught|floatformat:2 }}%"></i>{% endif %}
+            {% if m.at_risk %}<i class="seg at-risk" style="height:{{ m.at_risk|pct_of:m.caught|floatformat:2 }}%"></i>{% endif %}
+            {% if m.accepted %}<i class="seg accepted" style="height:{{ m.accepted|pct_of:m.caught|floatformat:2 }}%"></i>{% endif %}
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="month-axis" aria-hidden="true">{% for m in months %}<span>{% if months|length > 6 %}{{ m.label|slice:":3" }}{% else %}{{ m.label }}{% endif %}</span>{% endfor %}</div>
+      <div class="legend" style="margin-top:10px"><span><i class="swatch prevented"></i>Prevented</span><span><i class="swatch at-risk"></i>Still at risk</span><span><i class="swatch accepted"></i>Accepted</span></div>
+      {% else %}
+      <div class="empty">{% icon "check" %}<h3>Nothing flagged in these months</h3><p class="muted">Charges over the quote, unapproved extras and duplicates appear here as invoices are checked.</p></div>
+      {% endif %}
+    </div>
+    {% if months_max %}
+    <details class="chart-table">
+      <summary>Show as a table</summary>
+      <table class="data">
+        <thead><tr><th>Month</th><th class="num">Caught</th><th class="num">Prevented</th><th class="num">Still at risk</th><th class="num">Accepted</th></tr></thead>
+        <tbody>{% for m in months %}<tr><td>{{ m.label }}</td><td class="num">{{ m.caught|whole }}</td><td class="num">{{ m.prevented|whole }}</td><td class="num">{{ m.at_risk|whole }}</td><td class="num">{{ m.accepted|whole }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </details>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <div class="card-head"><div><h2>By check</h2><p>Which checks caught the money</p></div></div>
+    <div class="card-body">
+      {% if s.by_code %}
+      <div class="hbars money">
+        {% for r in s.by_code %}
+        <div class="hbar-row" title="{{ r.label }}: {{ r.caught|money:s.currency }} in {{ r.count }} catch{{ r.count|pluralize:'es' }}">
+          <span class="hbar-label">{{ r.label }} <span class="sub">{{ r.count }}</span></span>
+          <span class="hbar"><span style="width:{{ r.caught|pct_of:s.code_max|floatformat:2 }}%"></span></span>
+          <span class="hbar-val num">{{ r.caught|whole }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty">{% icon "check" %}<h3>Nothing flagged in this period</h3><p class="muted">Add quotes in <a href="{% url 'rates:list' %}">Rates</a> so charges above them are caught.</p></div>
+      {% endif %}
+    </div>
+  </section>
+</div>
+
+<div class="grid-side" style="margin-top:16px">
+  <section class="card">
+    <div class="card-head"><div><h2>Top overcharging vendors</h2><p>Most money flagged in this period</p></div></div>
+    {% if s.top_vendors %}
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Vendor</th><th class="num">Caught</th><th class="num">Prevented</th><th class="num">Still at risk</th><th class="num">Accepted</th></tr></thead>
+        <tbody>
+        {% for v in s.top_vendors %}
+        <tr>
+          <td><strong>{{ v.label }}</strong><span class="sub">{{ v.count }} charge{{ v.count|pluralize }} flagged</span>
+            <span class="hbar mini" aria-hidden="true"><span style="width:{{ v.caught|pct_of:s.vendor_max|floatformat:2 }}%"></span></span></td>
+          <td class="num"><strong>{{ v.caught|whole }}</strong></td>
+          <td class="num">{{ v.prevented|whole }}</td>
+          <td class="num">{{ v.at_risk|whole }}</td>
+          <td class="num">{{ v.accepted|whole }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<div class="card-body muted small">No vendor has been flagged in this period.</div>{% endif %}
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>How these numbers are counted</h2></div>
+    <div class="card-body small rules-text">
+      <p><strong>Caught</strong> is every amount a check flagged before payment: charges above the quote, extra charges nobody approved, duplicate invoices, totals that don't add up and unusual amounts.</p>
+      <p><strong>Prevented</strong>: the shipment was rejected, or the invoice was corrected, replaced or taken out so the check no longer finds the problem. If a corrected invoice is still too high, only the reduction counts.</p>
+      <p><strong>Still at risk</strong>: the issue is open on a shipment nobody has approved or rejected yet.</p>
+      <p><strong>Accepted</strong>: a reviewer accepted the warning or an approver overrode the error, or the shipment was approved with the warning open. The charge was paid as invoiced.</p>
+      <p class="muted">Money flagged by two checks on one invoice counts once. A catch that goes away because a quote or rule changed is not counted. Each catch belongs to the month it was first flagged.</p>
+    </div>
+  </section>
+</div>
+
+<section class="card" style="margin-top:16px">
+  <div class="card-head"><div><h2>Latest catches</h2><p>Newest first{% if s.catches|length == 25 %}, the latest 25. Export CSV for all of them{% endif %}.</p></div></div>
+  {% if s.catches %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Flagged</th><th>Shipment</th><th>Vendor</th><th>Check</th><th class="num">Amount</th><th>Outcome</th></tr></thead>
+      <tbody>
+      {% for r in s.catches %}
+      <tr>
+        <td class="nowrap">{{ r.catch.first_caught_at|date:"j M Y" }}</td>
+        <td>{% if r.catch.shipment %}<a class="row-link" href="{% url 'review:shipment' r.catch.shipment_id %}#issues">{{ r.catch.shipment.reference }}</a>{% else %}<span class="muted">Removed</span>{% endif %}
+          <span class="sub">{{ r.catch.document.original_filename|default:""|truncatechars:32 }}</span></td>
+        <td>{{ r.catch.vendor_name|default:"–" }}</td>
+        <td>{{ r.title }}{% if r.catch.charge_code %}<span class="sub">{{ r.catch.charge_code|charge_label }}</span>{% endif %}</td>
+        <td class="num nowrap">{{ r.catch.amount_caught|money:r.catch.currency }}
+          {% if r.partly_counted %}<span class="sub">{{ r.amount|money:s.currency }} counted, the rest is in the charge checks</span>
+          {% elif r.catch.amount_latest < r.catch.amount_caught and r.issue %}<span class="sub">now {{ r.catch.amount_latest|money:r.catch.currency }}</span>{% endif %}</td>
+        <td>{% if r.amount is None %}<span class="badge neutral">No exchange rate</span>
+          {% elif r.outcome == "prevented" %}<span class="badge ok">{{ r.outcome_label }}</span>
+          {% elif r.outcome == "at_risk" %}<span class="badge warn">{{ r.outcome_label }}</span>
+          {% else %}<span class="badge neutral">{{ r.outcome_label }}</span>{% endif %}
+          {% if r.resolved_note %}<span class="sub">“{{ r.resolved_note|truncatechars:60 }}”</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">{% icon "check" %}<h3>Nothing flagged in this period</h3><p class="muted">Every invoice checked so far matched its quote and approved charges.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

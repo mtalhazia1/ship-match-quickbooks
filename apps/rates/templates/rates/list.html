@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% load ui rates_tags %}
+{% block title %}Rates{% endblock %}
+{% block content %}
+{% include "rates/_head.html" %}
+
+<form class="filters" method="get" role="search">
+  <label class="sr-only" for="q">Search quotes</label>
+  <input id="q" type="search" name="q" value="{{ f.q|default:'' }}" placeholder="Vendor, quote reference or port">
+  <label class="sr-only" for="vendor">Vendor</label>
+  <select id="vendor" name="vendor" data-autosubmit>
+    <option value="">All vendors</option>
+    {% for key, name, n in vendors %}<option value="{{ key }}"{% if f.vendor == key %} selected{% endif %}>{{ name }} ({{ n }})</option>{% endfor %}
+  </select>
+  <label class="sr-only" for="equipment">Equipment</label>
+  <select id="equipment" name="equipment" data-autosubmit>
+    <option value="">Any equipment</option>
+    {% for code, name in equipment %}<option value="{{ code }}"{% if f.equipment == code %} selected{% endif %}>{{ code }}</option>{% endfor %}
+  </select>
+  <label class="sr-only" for="status">Validity</label>
+  <select id="status" name="status" data-autosubmit>
+    {% for key, name, n in tabs %}<option value="{{ key }}"{% if key == status %} selected{% endif %}>{{ name }} ({{ n }})</option>{% endfor %}
+  </select>
+  <button class="btn" type="submit">{% icon "search" %} Search</button>
+  {% if f.q or f.vendor or f.equipment or status != "active" %}<a class="btn btn-quiet" href="{% url 'rates:list' %}">Clear</a>{% endif %}
+</form>
+
+<section class="card">
+  {% if page.object_list %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Vendor</th><th>Lane</th><th>Equipment</th><th>Valid</th><th>Charges</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for q in page %}
+      <tr>
+        <td><a class="row-link wrap" href="{% url 'rates:detail' q.pk %}">{{ q.vendor_name }}</a><span class="sub">{{ q.reference|default:"No reference" }}</span></td>
+        <td>{{ q.origin|default:"Any origin" }} <span class="muted">to</span> {{ q.destination|default:"any destination" }}
+          {% if q.origin_key or q.destination_key %}<span class="sub mono">{{ q.origin_key|default:"any" }} to {{ q.destination_key|default:"any" }}</span>{% endif %}</td>
+        <td>{{ q.equipment|default:"Any" }}</td>
+        <td class="nowrap">{{ q.valid_from|date:"j M Y" }}<span class="sub">{% if q.valid_to %}to {{ q.valid_to|date:"j M Y" }}{% else %}No end date{% endif %}</span></td>
+        <td class="nowrap">{{ q.n_charges }} line{{ q.n_charges|pluralize }}
+          {% if q.per_container is not None %}<span class="sub num">{{ q.per_container|money:q.currency }} per container</span>{% endif %}</td>
+        <td>{% include "rates/_status.html" with state=q.state %}{% if q.all_in %}<span class="sub">All-in</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "includes/pager.html" %}
+  {% elif any_quotes %}
+  <div class="empty">{% icon "search" %}<h3>No quotes match these filters</h3><p class="muted">Try another validity, or clear the filters.</p></div>
+  {% else %}
+  <div class="empty">{% icon "book" %}<h3>No quotes yet</h3>
+    <p class="muted">Add your vendors' quotes to catch invoices that charge more than agreed. Without quotes, freight invoices are only checked for totals, duplicates and container numbers.</p>
+    {% if can_edit %}<div class="actions" style="justify-content:center;margin-top:12px">
+      <a class="btn btn-primary" href="{% url 'rates:create' %}">{% icon "plus" %} New quote</a>
+      <a class="btn" href="{% url 'rates:import' %}">{% icon "upload" %} Import a CSV file</a></div>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

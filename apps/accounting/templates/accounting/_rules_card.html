@@ -1,0 +1,15 @@
+{% load accounting_tags %}{# Settings > Accounting: vendor account rules for the active system. #}
+{% with system=active.system|default:"quickbooks" %}
+<section class="card">
+  <div class="card-head"><div><h2>Vendor account rules</h2><p>Learned when a reviewer sets an account on an invoice{% if active %}, for {{ active.system_name }}{% endif %}.</p></div></div>
+  {% if mappings %}
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Vendor</th><th>Expense account</th></tr></thead>
+    <tbody>{% for m in mappings %}{% rule_for m system as rule %}<tr>
+      <td>{{ m.display_name }}{% if system == "xero" and m.xero_contact_id %}<span class="sub">Linked to a Xero contact</span>{% elif system != "xero" and m.qbo_vendor_id %}<span class="sub">QuickBooks vendor {{ m.qbo_vendor_id }}</span>{% endif %}</td>
+      <td>{{ rule.name|default:rule.id|default:"Default" }}{% if rule.name and rule.id %}<span class="sub">{% if system == "xero" %}Code{% else %}ID{% endif %} {{ rule.id }}</span>{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="card-body muted small">No rules yet. Set an account on any invoice in a shipment.</div>{% endif %}
+</section>
+{% endwith %}

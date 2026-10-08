@@ -1,0 +1,12 @@
+{% load ui intake_tags %}{% if d.parent_id or d.original_file %}
+<p class="origin small">
+  {% if d.parent_id %}{% with p=d.intake.part %}
+  <span>{% icon "link" %} {% if p %}Part {{ p.index }} of {{ p.count }} ({{ p.pages|pages_label }}) of{% else %}From archive{% endif %}
+    <a href="{% url 'review:document' d.parent_id %}">{{ d.parent.original_filename }}</a></span>
+  {% endwith %}{% endif %}
+  {% if d.original_file %}
+  <span>{% icon "file" %} Original file: {{ d.intake.format|default:"another format" }}{% if d.intake.image.rotated %}, turned upright{% endif %}{% if d.intake.image.pages > 1 %}, {{ d.intake.image.pages }} pages{% endif %}{% if d.intake.sheet.truncated %}, only the first rows were read{% endif %}</span>
+  <a href="{% url 'intake:original' d.pk %}">{% icon "download" %} Download original</a>
+  {% endif %}
+</p>
+{% endif %}

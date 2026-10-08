@@ -1,0 +1,22 @@
+{% load ui %}{% if can.view %}
+<details class="reveal popover pf-export" data-menu>
+  <summary class="btn">{% icon "download" %} Export</summary>
+  <div class="pop-form pf-export-pop">
+    <p class="small muted">{% if kind == "documents" %}The documents in this list, with every value read.{% else %}The shipments in this list (same tab and search).{% endif %}</p>
+    {% with q=request.GET.urlencode %}
+    {% if kind == "documents" %}
+    <div class="pf-export-row"><span>Documents</span>
+      <a class="btn btn-sm" href="{% url 'integrations:export' 'documents' %}?{% if q %}{{ q }}&amp;{% endif %}format=csv">CSV</a>
+      <a class="btn btn-sm" href="{% url 'integrations:export' 'documents' %}?{% if q %}{{ q }}&amp;{% endif %}format=xlsx">Excel</a></div>
+    {% else %}
+    <div class="pf-export-row"><span>Shipments with totals</span>
+      <a class="btn btn-sm" href="{% url 'integrations:export' 'shipments' %}?{% if q %}{{ q }}&amp;{% endif %}format=csv">CSV</a>
+      <a class="btn btn-sm" href="{% url 'integrations:export' 'shipments' %}?{% if q %}{{ q }}&amp;{% endif %}format=xlsx">Excel</a></div>
+    <div class="pf-export-row"><span>Their issues</span>
+      <a class="btn btn-sm" href="{% url 'integrations:export' 'issues' %}?{% if q %}{{ q }}&amp;{% endif %}format=csv">CSV</a>
+      <a class="btn btn-sm" href="{% url 'integrations:export' 'issues' %}?{% if q %}{{ q }}&amp;{% endif %}format=xlsx">Excel</a></div>
+    {% endif %}
+    {% endwith %}
+  </div>
+</details>
+{% endif %}

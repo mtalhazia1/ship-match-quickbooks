@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Assignment{% endblock %}
+{% block content %}
+{% include "settings/_nav.html" %}
+
+<div class="grid-side">
+  <div class="stack">
+    <form class="card" method="post" action="{% url 'workflow:assignment_settings' %}">{% csrf_token %}
+      <div class="card-head"><div><h2>Automatic assignment</h2><p>Who gets a shipment when it first needs review or is ready to approve. Anyone can still reassign it by hand.</p></div></div>
+      <div class="card-body stack">
+        <fieldset class="plain-fieldset stack wf-modes">
+          <legend class="lbl">New shipments</legend>
+          {% for key, label in modes %}
+          <label class="check"><input type="radio" name="mode" value="{{ key }}"{% if rules.mode == key %} checked{% endif %}>
+            <span class="wf-opt"><strong>{{ label }}</strong>
+              <span class="hint">{% if key == "off" %}Shipments wait in the queue until someone picks them up.
+              {% elif key == "round_robin" %}Each new shipment goes to the next reviewer in turn.
+              {% else %}Shipments go to the person set for the vendor on their invoices (rules below).{% endif %}</span></span></label>
+          {% endfor %}
+        </fieldset>
+        <label class="check"><input type="checkbox" name="include_approvers"{% if rules.include_approvers %} checked{% endif %}><span>Approvers take turns too, not only reviewers</span></label>
+        <label class="check"><input type="checkbox" name="vendor_fallback"{% if rules.vendor_fallback %} checked{% endif %}><span>By vendor: when no rule matches, take turns instead of leaving the shipment unassigned</span></label>
+        <div><button class="btn btn-primary" type="submit">Save rules</button></div>
+      </div>
+    </form>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Vendor rules</h2><p>Used when new shipments are assigned by vendor. The vendor is read from the shipment's invoices.</p></div></div>
+      {% if vendor_rules %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Vendor</th><th>Goes to</th><th><span class="sr-only">Remove</span></th></tr></thead>
+          <tbody>
+          {% for r in vendor_rules %}
+          <tr>
+            <td>{{ r.vendor_name }}</td>
+            <td>{{ r.assignee|display_name }}{% if not r.assignee.is_active %} <span class="badge warn">Deactivated</span>{% endif %}</td>
+            <td class="num"><form method="post" action="{% url 'workflow:vendor_rule_delete' r.pk %}">{% csrf_token %}<button class="btn btn-sm btn-quiet" type="submit" aria-label="Remove the rule for {{ r.vendor_name }}">Remove</button></form></td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}<p class="wf-empty">No vendor rules yet.</p>{% endif %}
+      <form class="inline-form wf-rule-form" method="post" action="{% url 'workflow:vendor_rule_add' %}">{% csrf_token %}
+        <label class="sr-only" for="wf-vendor">Vendor name</label>
+        <input id="wf-vendor" type="text" name="vendor_name" list="wf-vendors" placeholder="Vendor name, as on its invoices" required maxlength="200">
+        <datalist id="wf-vendors">{% for v in vendors %}<option value="{{ v }}">{% endfor %}</datalist>
+        <label class="sr-only" for="wf-vendor-person">Goes to</label>
+        <select id="wf-vendor-person" name="assignee" required>
+          <option value="">Goes to…</option>
+          {% for p in people %}<option value="{{ p.pk }}">{{ p|display_name }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-sm" type="submit">{% icon "plus" %} Add rule</button>
+      </form>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="card">
+      <div class="card-head"><h2>Taking turns</h2></div>
+      <div class="card-body">
+        {% if pool %}
+        <p class="small">In this order, starting after whoever got the last one:</p>
+        <ol class="wf-pool">{% for u in pool %}<li>{{ u|display_name }}{% if rules.last_assigned_id == u.pk %} <span class="muted small">(got the last one)</span>{% endif %}</li>{% endfor %}</ol>
+        {% else %}<p class="muted small">Nobody to take turns: invite a reviewer on the Team page{% if not rules.include_approvers %}, or let approvers take turns too{% endif %}.</p>{% endif %}
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Waiting shipments</h2></div>
+      <div class="card-body">
+        <p>{% if waiting %}{{ waiting }} shipment{{ waiting|pluralize }} needing review or approval {{ waiting|pluralize:"has,have" }} never been assigned.{% else %}Every shipment waiting for review or approval has been assigned.{% endif %}</p>
+        {% if waiting and rules.mode != "off" %}
+        <form method="post" action="{% url 'workflow:assign_waiting' %}">{% csrf_token %}<button class="btn" type="submit">Assign them now</button></form>
+        {% elif waiting %}<p class="hint">Turn on automatic assignment to share them out.</p>{% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

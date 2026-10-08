@@ -1,0 +1,27 @@
+{% load ui %}{% if checklist %}
+<section class="card pf-onboarding" aria-labelledby="pf-onboarding-title">
+  <div class="card-head">
+    <div>
+      <h2 id="pf-onboarding-title">Get started</h2>
+      <p>{{ checklist.done }} of {{ checklist.total }} done. Each step ticks itself when it's really set up.</p>
+    </div>
+    <form method="post" action="{% url 'billing:dismiss_onboarding' %}">
+      <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+      <button class="btn btn-sm btn-quiet" type="submit">Hide this list</button>
+    </form>
+  </div>
+  <div class="pf-progress" role="progressbar" aria-valuemin="0" aria-valuemax="{{ checklist.total }}" aria-valuenow="{{ checklist.done }}" aria-label="Getting started progress"><span style="width:{{ checklist.percent }}%"></span></div>
+  <ol class="pf-steps">
+    {% for item in checklist.items %}
+    <li class="{% if item.done %}is-done{% endif %}">
+      <span class="pf-step-mark" aria-hidden="true">{% if item.done %}{% icon "check" %}{% else %}{{ forloop.counter }}{% endif %}</span>
+      <div class="pf-step-text">
+        <strong>{{ item.title }}</strong>{% if item.done %}<span class="sr-only"> (done)</span>{% endif %}
+        <span class="sub">{{ item.help }}</span>
+      </div>
+      {% if not item.done and item.url %}<a class="btn btn-sm" href="{{ item.url }}">{{ item.action }}</a>{% elif item.done %}<span class="badge ok">Done</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}

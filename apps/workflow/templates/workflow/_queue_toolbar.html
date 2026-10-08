@@ -1,0 +1,25 @@
+{% load ui workflow_tags %}{% wf_queue as wq %}{% if wq %}
+<form id="wf-bulk" class="wf-bulkbar" method="post" action="{% url 'workflow:bulk' %}" data-wf-bulk>{% csrf_token %}
+  <input type="hidden" name="next" value="{{ wq.next }}">
+  <div class="wf-chips" role="group" aria-label="Show shipments assigned to">
+    {% for c in wq.chips %}<a class="wf-chip{% if c.on %} on{% endif %}" href="{{ c.url }}"{% if c.on %} aria-current="true"{% endif %}>{{ c.label }}{% if c.count is not None %}<span class="n">{{ c.count }}</span>{% endif %}</a>{% endfor %}
+  </div>
+  {% if can.edit %}
+  <div class="wf-bulk-actions" role="group" aria-label="Bulk actions on the ticked shipments">
+    <span class="wf-selected" aria-live="polite"><span data-wf-selected-count>0</span> selected</span>
+    {% if can.approve %}<button class="btn btn-sm" type="submit" name="action" value="approve" data-wf-needs-selection data-wf-bulk-approve>{% icon "check" %} Approve</button>{% endif %}
+    <span class="wf-assign-group">
+      <label class="sr-only" for="wf-bulk-assignee">Assign the ticked shipments to</label>
+      <select id="wf-bulk-assignee" name="assignee">
+        <option value="">Assign to…</option>
+        {% if wq.me_assignable %}<option value="me">Me</option>{% endif %}
+        {% for p in wq.people %}{% if p.pk != user.pk %}<option value="{{ p.pk }}">{{ p|display_name }}</option>{% endif %}{% endfor %}
+        <option value="none">Nobody (unassign)</option>
+      </select>
+      <button class="btn btn-sm" type="submit" name="action" value="assign" data-wf-needs-selection>Assign</button>
+    </span>
+    {% if can.post %}<button class="btn btn-sm" type="submit" name="action" value="post" data-wf-needs-selection title="Approved shipments only">{% icon "send" %} Post to accounting</button>{% endif %}
+  </div>
+  {% endif %}
+</form>
+{% endif %}

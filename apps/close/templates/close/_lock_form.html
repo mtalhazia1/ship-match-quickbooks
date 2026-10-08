@@ -1,0 +1,13 @@
+{% load ui %}<div class="decision-actions">
+  <details class="popover close-lock" data-focus>
+    <summary class="btn btn-primary">{% icon "lock" %} Lock version {{ next_version }}</summary>
+    <form class="pop-form" method="post" action="{% url 'close:lock' %}">{% csrf_token %}
+      <input type="hidden" name="period" value="{{ period|date:'Y-m-d' }}">
+      <input type="hidden" name="expected_version" value="{% if versions %}{{ versions.0.version }}{% else %}0{% endif %}">
+      <label class="lbl" for="lock-note">{% if need_note %}Why does the booked amount change?{% else %}Note for auditors (optional){% endif %}</label>
+      <textarea id="lock-note" name="note" maxlength="500" {% if need_note %}required {% endif %}placeholder="{% if need_note %}For example: late Harborlink invoice received on 4 Oct{% else %}For example: reviewed with the controller{% endif %}"></textarea>
+      <p class="hint">The report is stored exactly as shown now: {{ report.totals.counted }} line{{ report.totals.counted|pluralize }}, {{ report.totals.total|money:report.currency }}. Nobody can change it afterwards.</p>
+      <button class="btn btn-primary" type="submit">Lock the period ending {{ period|date:"j M Y" }}</button>
+    </form>
+  </details>
+</div>

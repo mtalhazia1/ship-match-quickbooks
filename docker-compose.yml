@@ -1,0 +1,98 @@
+# Local stack: Postgres, Redis, the web app and background workers.
+#   docker compose up -d --build        (or scripts\docker-up.ps1 on Windows)
+# Secrets (QuickBooks, Anthropic) come from .env; infrastructure settings are below.
+# S3-compatible storage (MinIO) is optional:  docker compose --profile s3 up -d
+
+x-app: &app
+  build: .
+  user: root   # the bind-mounted source belongs to your user; production runs as the unprivileged "app" user
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    DATABASE_URL: postgres://shipmatch:shipmatch@db:5432/shipmatch
+    CELERY_BROKER_URL: redis://redis:6379/0
+    CACHE_URL: redis://redis:6379/1
+    CELERY_TASK_ALWAYS_EAGER: "0"
+    S3_BUCKET: ${S3_BUCKET:-}
+    DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,web
+  volumes:
+    - .:/app
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  web:
+    <<: *app
+    command: sh -c "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 30
+
+  worker:
+    <<: *app
+    command: celery -A config worker -l info --concurrency 2
+
+  beat:
+    <<: *app
+    command: celery -A config beat -l info
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: shipmatch
+      POSTGRES_USER: shipmatch
+      POSTGRES_PASSWORD: shipmatch
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shipmatch -d shipmatch"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio
+    profiles: ["s3"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - miniodata:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  # Creates the bucket once MinIO is up.
+  minio-init:
+    image: minio/mc
+    profiles: ["s3"]
+    depends_on:
+      - minio
+    entrypoint: >
+      sh -c "sleep 3 && mc alias set local http://minio:9000 minioadmin minioadmin &&
+             mc mb --ignore-existing local/shipmatch"
+
+volumes:
+  pgdata:
+  miniodata:

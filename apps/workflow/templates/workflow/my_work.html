@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}My work{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>My work</h1>
+    <p class="lede">Shipments assigned to you, and shipments ready for your approval, in every organization you work in. Oldest first.</p>
+  </div>
+  <a class="btn" href="{% url 'workflow:portfolio' %}">{% icon "briefcase" %} All clients</a>
+</div>
+
+{% if hidden %}
+<ul class="flash"><li class="warning">{% icon "lock" %}<span>{{ hidden|length }} client{{ hidden|length|pluralize }} ({% for o in hidden %}{{ o.name }}{% if not forloop.last %}, {% endif %}{% endfor %}) require{{ hidden|length|pluralize:"s," }} two-factor authentication, so {{ hidden|length|pluralize:"its,their" }} work isn't listed. <a href="{% url 'accounts:security' %}">Turn it on</a> to see it.</span></li></ul>
+{% endif %}
+
+<nav class="tabs" aria-label="Which work">
+  <a href="?{% if client %}client={{ client }}&amp;{% endif %}kind=" class="{% if not kind %}on{% endif %}">Everything</a>
+  <a href="?{% if client %}client={{ client }}&amp;{% endif %}kind=assigned" class="{% if kind == 'assigned' %}on{% endif %}">Assigned to me</a>
+  <a href="?{% if client %}client={{ client }}&amp;{% endif %}kind=approve" class="{% if kind == 'approve' %}on{% endif %}">Ready for my approval</a>
+</nav>
+
+<form class="filters" method="get">
+  <input type="hidden" name="kind" value="{{ kind }}">
+  <label class="sr-only" for="wf-client">Client</label>
+  <select id="wf-client" name="client" data-autosubmit>
+    <option value="">All clients</option>
+    {% for o in clients %}<option value="{{ o.slug }}"{% if o.slug == client %} selected{% endif %}>{{ o.name }}</option>{% endfor %}
+  </select>
+  <noscript><button class="btn" type="submit">Show</button></noscript>
+  <span class="small muted">{{ total }} shipment{{ total|pluralize }}: {{ assigned_total }} assigned to you, {{ approve_total }} you can approve now</span>
+</form>
+
+<section class="card">
+  {% if page.object_list %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Shipment</th><th>Client</th><th>Why it's here</th><th>Status</th><th class="num">Payable total</th><th>Waiting</th><th><span class="sr-only">Action</span></th></tr></thead>
+      <tbody>
+      {% for i in page %}
+      <tr>
+        <td><a class="row-link" href="{% url 'review:shipment' i.shipment.pk %}?org={{ i.org.slug }}">{{ i.shipment.reference }}</a>
+          {% if i.shipment.bl_number %}<span class="sub">B/L {{ i.shipment.bl_number }}</span>{% endif %}</td>
+        <td>{{ i.org.name }}</td>
+        <td><div class="tags">{% if i.assigned %}<span class="tag alert-tag">Assigned to you</span>{% endif %}{% if i.can_approve %}<span class="tag ok">Ready for your approval</span>{% elif i.blockers %}<span class="tag warning" title="{{ i.blockers|join:' ' }}">You can't approve it</span>{% endif %}</div></td>
+        <td>{% include "includes/status.html" with s=i.shipment %}</td>
+        <td class="num nowrap">{% for cur, amount in i.totals.by_currency.items %}<div>{{ amount|money:cur }}</div>{% empty %}–{% endfor %}</td>
+        <td class="nowrap muted" title="Since {{ i.waiting_since|date:'j M Y, H:i' }}">{{ i.waiting_since|timesince }}</td>
+        <td class="num">{% if i.can_approve %}<a class="btn btn-sm btn-primary" href="{% url 'workflow:quick' i.shipment.pk %}?org={{ i.org.slug }}">Review and approve</a>{% else %}<a class="btn btn-sm" href="{% url 'review:shipment' i.shipment.pk %}?org={{ i.org.slug }}">Open</a>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "includes/pager.html" %}
+  {% else %}
+  <div class="empty">{% icon "check" %}<h3>Nothing waiting for you</h3><p class="muted">No shipment is assigned to you or waiting for your approval{% if client %} in this client{% endif %}.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

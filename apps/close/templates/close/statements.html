@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% load ui close_tags %}
+{% block title %}Vendor statements{% endblock %}
+{% block content %}
+{% include "close/_head.html" with tab="statements" %}
+
+<div class="grid-side close-statements">
+  <div class="stack fluid">
+    {% if can_act %}
+    <form class="dropzone" method="post" action="{% url 'close:statement_upload' %}" enctype="multipart/form-data" data-dropzone>{% csrf_token %}
+      {% icon "upload" %}
+      <div class="grow">
+        <strong>Upload a vendor statement</strong>
+        <span class="small muted" data-file-status>PDF, Excel (.xlsx) or CSV. ShipMatch reads the lines and matches each one with the invoices, credit notes and payments it knows.</span>
+      </div>
+      <label class="sr-only" for="statement-file">Statement file</label>
+      <input id="statement-file" type="file" name="file" accept=".pdf,.xlsx,.csv,application/pdf,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+      <button class="btn btn-primary" type="submit">Read statement</button>
+    </form>
+    {% endif %}
+
+    <section class="card">
+      <div class="card-head"><div><h2>Statements</h2><p>Newest first. The difference is the vendor's balance minus ShipMatch's.</p></div>
+        {% if vendors %}<form class="inline-form" method="get">
+          <label class="sr-only" for="vendor-filter">Vendor</label>
+          <select id="vendor-filter" name="vendor" data-autosubmit>
+            <option value="">All vendors</option>
+            {% for k, name in vendors %}<option value="{{ k }}"{% if k == vendor %} selected{% endif %}>{{ name }}</option>{% endfor %}
+          </select>
+          <noscript><button class="btn btn-sm" type="submit">Show</button></noscript>
+        </form>{% endif %}
+      </div>
+      {% if statements %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Vendor</th><th>Statement date</th><th class="num">Vendor's balance</th><th class="num">ShipMatch</th><th class="num">Difference</th><th>Open findings</th></tr></thead>
+          <tbody>
+          {% for st in statements %}
+            <tr>
+              <td><a class="row-link wrap" href="{% url 'close:statement' st.pk %}">{{ st.vendor_name|default:"Vendor not chosen" }}</a>
+                <span class="sub">{{ st.original_filename }}, uploaded {{ st.created_at|date:"j M Y" }}{% if st.uploaded_by %} by {{ st.uploaded_by|display_name }}{% endif %}</span></td>
+              <td class="nowrap">{{ st.statement_date|date:"j M Y"|default:"–" }}</td>
+              {% if st.status == "needs_vendor" %}
+              <td colspan="4"><span class="badge warn">Choose the vendor</span></td>
+              {% else %}
+              <td class="num nowrap">{{ st.summary.statement_balance|money:st.summary.currency }}</td>
+              <td class="num nowrap">{{ st.summary.shipmatch_balance|money:st.summary.currency }}</td>
+              <td class="num nowrap">{% if st.summary.difference|is_zero %}<span class="badge ok">Agrees</span>{% else %}{{ st.summary.difference|signed }}{% endif %}</td>
+              <td>{% with n=st.open_items %}{% if n %}<span class="tag warning">{{ n }} open</span>{% else %}<span class="tag ok">None</span>{% endif %}{% endwith %}</td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% include "includes/pager.html" %}
+      {% else %}
+      <div class="empty">{% icon "file" %}<h3>No statements yet</h3><p class="muted">Upload the statement a vendor sends at month end to see which invoices, credits and payments you both agree on.</p></div>
+      {% endif %}
+    </section>
+  </div>
+
+  <aside class="stack fluid">
+    <section class="card">
+      <div class="card-head"><div><h2>Payments to vendors</h2><p>Compared with the payments on each statement.</p></div></div>
+      {% if payments %}
+      <ul class="plain-list">
+        {% for p in payments %}
+        <li><strong>{{ p.amount|money:p.currency }}</strong> to {{ p.vendor_name }}
+          <span class="sub">{{ p.paid_on|date:"j M Y" }}{% if p.reference %}, {{ p.reference }}{% endif %}{% if p.invoice_numbers %}, for {{ p.invoice_numbers|join:", " }}{% endif %}. {{ p.get_source_display }}.</span></li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="card-body small muted">No payments recorded yet. Without them, invoices you paid look open in ShipMatch.</p>
+      {% endif %}
+      {% if can_act %}
+      <div class="doc-foot">
+        {% include "close/_payment_form.html" %}
+        {% if qbo %}<form method="post" action="{% url 'close:payment_sync' %}">{% csrf_token %}<button class="btn btn-sm" type="submit">{% icon "refresh" %} Read payments from QuickBooks</button></form>{% endif %}
+      </div>
+      {% endif %}
+    </section>
+    <section class="card">
+      <div class="card-head"><div><h2>What the findings mean</h2></div></div>
+      <dl class="card-body alert-defs small">
+        <dt>Amount differs</dt><dd>Same invoice number, different amount.</dd>
+        <dt>On the statement, never received</dt><dd>Ask the vendor for a copy (a draft email is ready).</dd>
+        <dt>Received, not on the statement</dt><dd>You have it; the vendor doesn't list it.</dd>
+        <dt>Credit notes not applied</dt><dd>Credits the vendor's balance doesn't include yet.</dd>
+        <dt>Possible duplicates</dt><dd>The same invoice twice on the statement.</dd>
+        <dt>Payments not applied</dt><dd>Money you paid that the statement doesn't show.</dd>
+      </dl>
+    </section>
+  </aside>
+</div>
+{% endblock %}

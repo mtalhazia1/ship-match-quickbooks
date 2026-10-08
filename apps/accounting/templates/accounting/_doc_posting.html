@@ -1,0 +1,21 @@
+{% load accounting_tags %}{# The posting line of an invoice or credit note on the shipment page (inside .doc-foot). #}
+{% with pb=item.posted system=qbo.system|default:"quickbooks" %}
+{% if pb %}
+<div class="pay-doc">
+  <span class="badge {% if pb.status == 'posted' %}ok{% elif pb.status == 'failed' %}err{% else %}neutral{% endif %}">{{ pb.get_system_display }}: {{ pb.get_status_display }}{% if pb.display_number %}, {{ pb.get_kind_display|lower }} {{ pb.display_number }}{% endif %}</span>
+  {% if pb.status == "posted" and pb.payment_status %}<span class="badge {{ pb|payment_tone }}">{{ pb.payment_label }}</span>{% endif %}
+  {% if pb.error %}<span class="small muted">{{ pb.error|truncatechars:160 }}</span>{% endif %}
+</div>
+{% endif %}
+{% rule_for item.mapping system as rule %}
+{% if can.edit %}
+<form class="inline-form" method="post" action="{% url 'review:set_account' d.pk %}">{% csrf_token %}
+  <span class="lbl">Expense account for this vendor</span>
+  <label class="sr-only" for="acct-name-{{ d.pk }}">Account name</label>
+  <input id="acct-name-{{ d.pk }}" type="text" name="account_name" placeholder="Account name, e.g. Freight In" value="{{ rule.name }}" size="20">
+  <label class="sr-only" for="acct-id-{{ d.pk }}">{% if system == "xero" %}Xero account code{% else %}QuickBooks account ID{% endif %}</label>
+  <input id="acct-id-{{ d.pk }}" type="text" name="account_id" placeholder="{% if system == 'xero' %}Xero code{% else %}QuickBooks ID{% endif %}" value="{{ rule.id }}" size="10">
+  <button class="btn btn-sm" type="submit">Save rule</button>
+</form>
+{% elif rule.id or rule.name %}<span class="small muted">Coded to {{ rule.name|default:rule.id }}</span>{% endif %}
+{% endwith %}

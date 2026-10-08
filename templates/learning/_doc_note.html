@@ -1,0 +1,13 @@
+{% load ui learning_tags %}{% vendor_learning d as L %}{% if L %}
+<div class="learned-note" role="note">
+  {% icon "refresh" %}
+  <div class="grow">
+    {% if L.corrections %}<strong>Learned from {{ L.corrections }} correction{{ L.corrections|pluralize }} for this vendor.</strong>{% else %}<strong>Read with what ShipMatch learned about {{ L.vendor }}.</strong>{% endif %}
+    {% if L.filled %}
+    <span>Filled or fixed from what it learned:</span>
+    <ul>{% for f in L.filled %}<li><span class="lf-name">{{ f.name }}</span>{% if f.how %} <span class="muted">{{ f.how }}</span>{% endif %}{% if f.replaced %} <span class="muted">(it would have read “{{ f.replaced }}”)</span>{% endif %}</li>{% endfor %}</ul>
+    {% elif L.corrections %}<span class="muted">Nothing on this document needed it.</span>{% endif %}
+  </div>
+  {% if can.manage and L.profile %}<a class="small nowrap" href="{% url 'learning:settings' %}#vendor-{{ L.profile.pk }}">What it learned</a>{% endif %}
+</div>
+{% endif %}

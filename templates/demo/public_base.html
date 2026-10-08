@@ -1,0 +1,38 @@
+{% load static ui %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>{% block title %}Try ShipMatch{% endblock %} – ShipMatch</title>
+  <link rel="icon" href="{% static 'img/favicon.svg' %}" type="image/svg+xml">
+  <link rel="preload" href="{% static 'fonts/Barlow-400.woff2' %}" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <script src="{% static 'js/app.js' %}" defer></script>
+  {% block head %}{% endblock %}
+</head>
+<body class="public">
+<a class="sr-only" href="#main">Skip to content</a>
+{% include "demo/_banner.html" with on_try_page=True %}
+<header class="public-head">
+  <a class="brand" href="{% if try_enabled %}{% url 'demo:try' %}{% else %}{% url 'accounts:login' %}{% endif %}">
+    <span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="1" fill="none" stroke="#102a43" stroke-width="2"/><path d="M6.5 8.5v7M10 8.5v7M13.5 8.5v7M17 8.5v7" stroke="#102a43" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+    <span><span class="brand-name">ShipMatch</span><span class="brand-sub">Freight AP reconciliation</span></span>
+  </a>
+  <nav class="public-nav" aria-label="Site">
+    {% if try_enabled and request.resolver_match.namespace != 'demo' %}<a href="{% url 'demo:try' %}">Try it on your invoice</a>{% endif %}
+    {% if request.resolver_match.namespace != 'roi' %}<a href="{% url 'roi:calculator' %}">ROI calculator</a>{% endif %}
+    {% if contact_url %}<a href="{{ contact_url }}" rel="noopener">Talk to us</a>{% endif %}
+    {% include "billing/_public_nav.html" %}
+    <a class="btn btn-sm" href="{% url 'accounts:login' %}">{% if demo_mode %}Open the demo{% else %}Sign in{% endif %}</a>
+  </nav>
+</header>
+<main id="main" tabindex="-1" class="public-main">
+  {% include "includes/messages.html" %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="public-foot">
+  <span>ShipMatch reads shipping paperwork, matches it to shipments and checks the numbers before anyone pays.</span>
+</footer>
+</body>
+</html>

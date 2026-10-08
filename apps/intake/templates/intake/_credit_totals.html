@@ -1,0 +1,3 @@
+{% load ui %}{% if totals.credits %}
+<div><dt>Credit notes</dt><dd>{% for cur, amount in totals.credits.items %}{{ amount|money:cur }}{% if not forloop.last %}, {% endif %}{% endfor %} <span class="muted small">taken off the payable total</span></dd></div>
+{% endif %}

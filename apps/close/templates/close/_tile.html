@@ -1,0 +1,12 @@
+{% if show %}{% load close_tags %}
+<a class="kpi close-kpi{% if not snap %} attention{% endif %}" href="{% url 'close:accruals' %}?period={{ period|date:'Y-m-d' }}">
+  <div class="k">Month-end {{ period|date:"M Y" }}</div>
+  {% if snap %}
+  <div class="v"><span class="cur">{{ snap.currency }}</span> {{ snap.total|whole }}</div>
+  <div class="d">Accrued, version {{ snap.version }} locked {{ snap.locked_at|date:"j M" }}</div>
+  {% else %}
+  <div class="v close-kpi-open">Not locked</div>
+  <div class="d">Check accruals and lock the period</div>
+  {% endif %}
+</a>
+{% endif %}

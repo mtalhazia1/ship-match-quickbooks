@@ -1,0 +1,49 @@
+{% load ui accounting_tags %}{# Payment status of the shipment's posted bills, read from QuickBooks or Xero. #}
+{% shipment_bills shipment as bills %}
+{% if bills %}
+{% for pb in bills %}{% if pb.is_gone %}
+<div class="decision rejected pay-gone">{% icon "alert-circle" %}
+  <div class="grow"><strong>{{ pb.get_kind_display }} {{ pb.display_number }} was {{ pb.get_payment_status_display|lower }} in {{ pb.get_system_display }}.</strong>
+    It was approved and posted from {{ pb.document.original_filename }}, but it is no longer open in {{ pb.get_system_display }}, so it won't be paid as approved.
+    If that was a mistake, enter it again in {{ pb.get_system_display }}; if the vendor sent a corrected invoice, process that one here.</div>
+</div>
+{% endif %}{% endfor %}
+<section class="card pay-card" id="payments">
+  <div class="card-head">
+    <div><h2>Payments</h2><p>What {% if qbo %}{{ qbo.system_name }}{% else %}the accounting system{% endif %} says about the bills posted from this shipment.</p></div>
+    {% if can.post and qbo and not qbo.needs_reconnect %}
+    <form method="post" action="{% url 'accounting:check_payments' %}">{% csrf_token %}
+      <input type="hidden" name="shipment" value="{{ shipment.pk }}">
+      <input type="hidden" name="next" value="{{ request.get_full_path }}#payments">
+      <button class="btn btn-sm" type="submit">{% icon "refresh" %} Check payments now</button>
+    </form>
+    {% endif %}
+  </div>
+  <div class="table-wrap">
+    <table class="data pay-table">
+      <thead><tr><th>Document</th><th>In accounting</th><th>Due</th><th>Status</th><th class="num">Amount</th><th class="num">Paid or used</th></tr></thead>
+      <tbody>
+      {% for pb in bills %}
+        <tr>
+          <td><a href="#doc-{{ pb.document_id }}">{{ pb.document.original_filename|truncatechars:42 }}</a><span class="sub">{{ pb.get_kind_display }}</span></td>
+          <td class="nowrap" data-label="In accounting">{% if pb.link %}<a href="{{ pb.link }}" target="_blank" rel="noopener noreferrer">{{ pb.get_system_display }} {{ pb.display_number|truncatechars:24 }} {% icon "external" %}</a>{% else %}{{ pb.get_system_display }} {{ pb.display_number|truncatechars:24 }}{% endif %}
+            {% if pb.status != "posted" %}<span class="sub">{{ pb.get_status_display }}</span>{% endif %}</td>
+          <td class="nowrap" data-label="Due">{% if pb.is_credit %}<span class="muted">–</span>{% else %}{{ pb.due_date|date:"j M Y"|default:"–" }}{% if pb.is_overdue %}<span class="sub pay-late">{{ pb.days_overdue }} day{{ pb.days_overdue|pluralize }} late</span>{% endif %}{% endif %}</td>
+          <td data-label="Status"><span class="badge {{ pb|payment_tone }}">{{ pb.payment_label }}</span>
+            {% if pb.paid_on %}<span class="sub">{% if pb.is_credit %}Used by{% else %}Paid on{% endif %} {{ pb.paid_on|date:"j M Y" }}</span>{% endif %}
+            {% if pb.payment_checked_at %}<span class="sub" title="{{ pb.payment_checked_at|date:'j M Y, H:i' }}">Checked {{ pb.payment_checked_at|timesince }} ago</span>{% endif %}</td>
+          <td class="num nowrap" data-label="Amount">{{ pb.amount_total|money:pb.currency }}</td>
+          <td class="num nowrap" data-label="Paid or used">{% if pb.amount_paid is not None %}{{ pb.amount_paid|money:pb.currency }}{% else %}–{% endif %}
+            {% if pb.payment_status == "partly_paid" and pb.amount_due %}<span class="sub">{{ pb.amount_due|money:pb.currency }} {% if pb.is_credit %}left{% else %}still due{% endif %}</span>{% endif %}</td>
+        </tr>
+        {% if pb.payments %}
+        <tr class="pay-detail"><td colspan="6">
+          <ul class="pay-list">{% for p in pb.payments %}<li>{% with day=p.date|iso_day %}{% if day %}{{ day|date:"j M Y" }}{% else %}No date{% endif %}{% endwith %}: {% if p.kind == "credit" %}credit {% elif p.kind == "refund" %}refund {% else %}payment {% endif %}{{ p.amount|money:pb.currency }}{% if p.reference %}, {{ p.reference }}{% endif %}</li>{% endfor %}</ul>
+        </td></tr>
+        {% endif %}
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}

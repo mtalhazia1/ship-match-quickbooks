@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% load ui close_tags %}
+{% block title %}Month-end accruals{% endblock %}
+{% block content %}
+{% include "close/_head.html" with tab="accruals" %}
+
+<div class="close-toolbar">
+  <div class="close-period">
+    <form class="inline-form" method="get" action="{% url 'close:accruals' %}">
+      <label class="small muted" for="close-period">Period ending</label>
+      <select id="close-period" name="period" data-autosubmit>
+        {% if custom_period %}<option value="{{ period|date:'Y-m-d' }}" selected>{{ period|date:"j M Y" }}</option>{% endif %}
+        {% for d in month_ends %}<option value="{{ d|date:'Y-m-d' }}"{% if d == period %} selected{% endif %}>{{ d|date:"j M Y" }}</option>{% endfor %}
+      </select>
+      <noscript><button class="btn btn-sm" type="submit">Show</button></noscript>
+    </form>
+    <form class="inline-form" method="get" action="{% url 'close:accruals' %}">
+      <label class="small muted" for="close-date">Other date</label>
+      <input id="close-date" type="date" name="period" value="{{ period|date:'Y-m-d' }}" required>
+      <button class="btn btn-sm" type="submit">Show</button>
+    </form>
+  </div>
+  <div class="actions">
+    <a class="btn" href="{% url 'close:accruals_csv' %}?{{ query }}">{% icon "download" %} CSV</a>
+    <a class="btn" href="{% url 'close:accruals_journal' %}?{{ query }}">{% icon "download" %} Journal entry (Excel)</a>
+  </div>
+</div>
+
+{% if versions %}
+<nav class="close-versions" aria-label="Versions of this period">
+  <span class="small muted">Versions:</span>
+  {% for v in versions %}<a class="badge {% if snapshot and snapshot.pk == v.pk %}ok{% else %}neutral plain{% endif %}" href="?period={{ period|date:'Y-m-d' }}&amp;version={{ v.version }}"{% if snapshot and snapshot.pk == v.pk %} aria-current="page"{% endif %}>Version {{ v.version }}</a>{% endfor %}
+  <a class="badge {% if live %}info{% else %}neutral plain{% endif %}" href="?period={{ period|date:'Y-m-d' }}&amp;live=1"{% if live %} aria-current="page"{% endif %}>Live preview</a>
+</nav>
+{% endif %}
+
+{# ---------------------------------------------------------------- state #}
+{% if snapshot %}
+<div class="decision done">{% icon "lock" %}
+  <div class="grow"><strong>Locked: version {{ snapshot.version }} for the period ending {{ period|date:"j M Y" }}.</strong>
+    Locked by {{ snapshot.locked_by|display_name }} on {{ snapshot.locked_at|date:"j M Y, H:i" }}{% if snapshot.note %}: “{{ snapshot.note }}”{% endif %}.
+    This is the report as booked; it can't be changed.{% if not snapshot.intact %} <strong class="close-bad">Its stored fingerprint doesn't match its contents. Tell your administrator.</strong>{% endif %}
+    <div class="small muted close-fingerprint">Fingerprint {{ snapshot.checksum|slice:":16" }}</div>
+  </div>
+  {% if can_act %}<div class="decision-actions"><a class="btn" href="?period={{ period|date:'Y-m-d' }}&amp;live=1">Prepare version {{ next_version }}</a></div>{% endif %}
+</div>
+{% elif versions %}
+<div class="decision blocked">{% icon "info" %}
+  <div class="grow"><strong>Live preview. Version {{ versions.0.version }} is locked at {{ versions.0.total|money:versions.0.currency }}.</strong>
+    {% if changes.added or changes.removed or changes.changed %}
+      Since then {{ changes.added }} line{{ changes.added|pluralize }} appeared, {{ changes.removed }} went away and {{ changes.changed }} changed amount: {{ changes.difference|signed:report.currency }} in total.
+    {% else %}Nothing has changed since it was locked.{% endif %}
+    Locking now creates version {{ next_version }}; version {{ versions.0.version }} stays as it was.
+  </div>
+  {% if not period_ended %}<span class="muted">This period hasn't ended yet, so it can't be locked.</span>
+  {% elif can_act and changes.added or can_act and changes.removed or can_act and changes.changed %}{% include "close/_lock_form.html" with need_note=True %}{% endif %}
+</div>
+{% else %}
+<div class="decision ready">{% icon "check" %}
+  <div class="grow"><strong>Not locked yet.</strong> Check the lines below, then lock the period. Locking keeps this report as version 1 for auditors, with the journal entry to book.
+    {% if not period_ended %}<span class="muted">This period hasn't ended yet, so it can't be locked.</span>{% elif not can_act %}<span class="muted">An approver locks the period.</span>{% endif %}</div>
+  {% if can_act and period_ended %}{% include "close/_lock_form.html" with need_note=False %}{% endif %}
+</div>
+{% endif %}
+
+{% if report.warnings %}
+<div class="close-notes">
+  {% for w in report.warnings %}<p class="intake-note">{% icon "alert" %}<span>{{ w }}</span></p>{% endfor %}
+</div>
+{% endif %}
+
+<div class="kpis">
+  <div class="kpi close-kpi-total"><div class="k">To accrue</div>
+    <div class="v"><span class="cur">{{ report.currency }}</span> {{ report.totals.total|money }}</div>
+    <div class="d">{{ report.totals.counted }} line{{ report.totals.counted|pluralize }}, {{ report.totals.shipments }} shipment{{ report.totals.shipments|pluralize }}</div></div>
+  <a class="kpi" href="?{{ query }}&amp;show=received#lines"><div class="k">Received, not booked</div>
+    <div class="v"><span class="cur">{{ report.currency }}</span> {{ report.totals.received|money }}</div>
+    <div class="d">{{ report.totals.received_lines }} invoice{{ report.totals.received_lines|pluralize }} and credit notes not in the books</div></a>
+  <a class="kpi" href="?{{ query }}&amp;show=estimate#lines"><div class="k">Not yet invoiced</div>
+    <div class="v"><span class="cur">{{ report.currency }}</span> {{ report.totals.estimated|money }}</div>
+    <div class="d">{{ report.totals.estimated_lines }} charge{{ report.totals.estimated_lines|pluralize }} estimated</div></a>
+  <a class="kpi{% if attention %} attention{% endif %}" href="?{{ query }}&amp;show=attention#lines"><div class="k">Needs a look</div>
+    <div class="v">{{ attention }}</div>
+    <div class="d">No amount, or low confidence</div></a>
+</div>
+
+<div class="grid-2">
+  <section class="card">
+    <div class="card-head"><div><h2>By vendor</h2><p>In {{ report.currency }}, at the period end</p></div></div>
+    {% if report.by_vendor %}
+    <div class="table-wrap">
+      <table class="data compact close-sum-table">
+        <thead><tr><th>Vendor</th><th class="num close-hide-sm">Received</th><th class="num close-hide-sm">Estimated</th><th class="num">Total</th></tr></thead>
+        <tbody>
+        {% for v in report.by_vendor %}
+          <tr><td><strong>{{ v.vendor_name }}</strong><span class="sub">{{ v.lines }} line{{ v.lines|pluralize }}</span>
+              <span class="hbar mini" aria-hidden="true"><span style="width:{{ v.total|pct:report.by_vendor.0.total|floatformat:2 }}%"></span></span></td>
+            <td class="num close-hide-sm">{{ v.received|money }}</td><td class="num close-hide-sm">{{ v.estimated|money }}</td>
+            <td class="num"><strong>{{ v.total|money }}</strong></td></tr>
+        {% endfor %}
+        </tbody>
+        <tfoot><tr><td><strong>Total</strong></td><td class="num close-hide-sm">{{ report.totals.received|money }}</td><td class="num close-hide-sm">{{ report.totals.estimated|money }}</td><td class="num"><strong>{{ report.totals.total|money }}</strong></td></tr></tfoot>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">{% icon "check" %}<h3>Nothing to accrue</h3><p class="muted">Every shipment that shipped by {{ period|date:"j M Y" }} is invoiced and booked.</p></div>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <div class="card-head"><div><h2>Journal entry</h2><p>Dated {{ period|date:"j M Y" }}, reversed on {{ reverse_on|date:"j M Y" }}</p></div></div>
+    {% if report.by_account %}
+    <div class="table-wrap">
+      <table class="data compact">
+        <thead><tr><th>Account</th><th class="num">Debit</th><th class="num">Credit</th></tr></thead>
+        <tbody>
+        {% for a in report.by_account %}
+          <tr><td>{{ a.account_name }}{% if a.account_id %} <span class="muted small">({{ a.account_id }})</span>{% endif %}
+              <span class="sub">{% if a.account_source == "vendor" %}Vendor's account{% else %}Default from Month-end settings{% endif %}, {{ a.lines }} line{{ a.lines|pluralize }}</span></td>
+            <td class="num">{% if a.total|is_negative %}{% else %}{{ a.total|money }}{% endif %}</td>
+            <td class="num">{% if a.total|is_negative %}{{ a.total|absval|money }}{% endif %}</td></tr>
+        {% endfor %}
+          <tr><td>{{ report.settings.accrued_account|default:cfg.accrued_account }}{% if report.settings.accrued_account_id %} <span class="muted small">({{ report.settings.accrued_account_id }})</span>{% endif %}<span class="sub">Credit: freight owed but not yet billed or posted</span></td>
+            <td class="num">{% if journal_total|is_negative %}{{ journal_total|absval|money }}{% endif %}</td>
+            <td class="num">{% if journal_total|is_negative %}{% else %}{{ journal_total|money }}{% endif %}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="card-body small muted close-card-note">The Excel file has the entry per vendor, the reversing entry and every line, ready to import or key in.</p>
+    {% else %}
+    <div class="empty">{% icon "check" %}<h3>No entry needed</h3></div>
+    {% endif %}
+  </section>
+</div>
+
+<section class="card close-lines" id="lines">
+  <div class="card-head"><div><h2>Lines</h2><p>Every amount, how it was found and how sure ShipMatch is.</p></div></div>
+  <nav class="tabs close-subtabs" aria-label="Show lines">
+    <a href="?{{ query }}#lines" class="{% if show == 'all' %}on{% endif %}">All<span class="n">{{ report.lines|length }}</span></a>
+    <a href="?{{ query }}&amp;show=received#lines" class="{% if show == 'received' %}on{% endif %}">Received, not booked<span class="n">{{ report.totals.received_lines }}</span></a>
+    <a href="?{{ query }}&amp;show=estimate#lines" class="{% if show == 'estimate' %}on{% endif %}">Not yet invoiced<span class="n">{{ report.totals.estimated_lines }}</span></a>
+    <a href="?{{ query }}&amp;show=attention#lines" class="{% if show == 'attention' %}on{% endif %}">Needs a look<span class="n">{{ attention }}</span></a>
+  </nav>
+  {% if lines %}
+  <div class="table-wrap">
+    <table class="data close-table">
+      <thead><tr><th>Shipment</th><th>Vendor and charges</th><th>How it was found</th><th class="num">Amount ({{ report.currency }})</th><th>Account</th>{% if live and can_act %}<th><span class="sr-only">Adjust</span></th>{% endif %}</tr></thead>
+      <tbody>
+      {% for ln in lines %}
+        <tr>
+          <td class="nowrap">{% if ln.shipment_id %}<a class="row-link" href="{% url 'review:shipment' ln.shipment_id %}">{{ ln.shipment_ref }}</a>{% else %}<span class="muted">No shipment</span>{% endif %}
+            {% if ln.bl_number %}<span class="sub">B/L {{ ln.bl_number }}</span>{% endif %}
+            {% if ln.ship_date %}<span class="sub">Shipped {{ ln.ship_date|isodate }}</span>{% endif %}</td>
+          <td><strong>{{ ln.vendor_name }}</strong>
+            <span class="sub">{{ ln.group_label }}</span>
+            {% if ln.document_id %}<span class="sub"><a href="{% url 'review:document' ln.document_id %}">{{ ln.doc_type }} {{ ln.invoice_number|default:ln.document_name }}</a>{% if ln.invoice_date %}, {{ ln.invoice_date|isodate }}{% endif %}</span>{% endif %}
+            <span class="sub">{{ ln.status }}</span></td>
+          <td class="close-how"><span class="badge {{ ln.confidence_label|conf_class }}">{{ ln.confidence_label }}</span> {{ ln.method_label }}
+            <span class="sub">{{ ln.basis }}</span></td>
+          <td class="num nowrap">{% if ln.amount_home is not None %}{{ ln.amount_home|money }}{% elif ln.amount is not None %}<span class="tag warning">No rate</span>{% else %}<span class="tag error">No amount</span>{% endif %}
+            {% if ln.amount is not None and ln.currency != report.currency %}<span class="sub">{{ ln.amount|money:ln.currency }}</span>{% endif %}</td>
+          <td class="close-acct">{{ ln.account_name }}{% if ln.account_source == "default" %}<span class="sub">Default</span>{% endif %}</td>
+          {% if live and can_act %}<td class="nowrap">
+            {% if ln.kind == "estimate" %}
+              {% if ln.adjustment_id %}
+              <form method="post" action="{% url 'close:remove_adjustment' ln.adjustment_id %}">{% csrf_token %}<input type="hidden" name="period" value="{{ period|date:'Y-m-d' }}"><button class="btn btn-sm btn-quiet" type="submit">Use the estimate</button></form>
+              {% else %}
+              {% include "close/_adjust_form.html" %}
+              {% endif %}
+            {% endif %}</td>{% endif %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">{% icon "check" %}<h3>No lines here</h3><p class="muted">{% if show == "attention" %}Every line has an amount ShipMatch is reasonably sure of.{% else %}Nothing to accrue in this group for the period ending {{ period|date:"j M Y" }}.{% endif %}</p></div>
+  {% endif %}
+</section>
+
+{% if report.left_out %}
+<section class="card close-left-out">
+  <div class="card-head"><div><h2>Not accrued</h2><p>Shipments and documents left out of the total, and why.</p></div><span class="num muted">{{ report.left_out|length }}</span></div>
+  <div class="table-wrap">
+    <table class="data compact">
+      <thead><tr><th>Shipment or document</th><th>Why</th>{% if live and can_act %}<th><span class="sr-only">Undo</span></th>{% endif %}</tr></thead>
+      <tbody>
+      {% for x in report.left_out %}
+        <tr><td class="nowrap">{% if x.shipment_id %}<a class="row-link" href="{% url 'review:shipment' x.shipment_id %}">{{ x.shipment_ref }}</a>{% endif %}
+            {% if x.document_id %}<span class="sub"><a href="{% url 'review:document' x.document_id %}">{{ x.document_name }}</a></span>{% endif %}</td>
+          <td><strong>{{ x.reason }}</strong>{% if x.detail %}<span class="sub">{{ x.detail }}</span>{% endif %}</td>
+          {% if live and can_act %}<td>{% if x.adjustment_id %}<form method="post" action="{% url 'close:remove_adjustment' x.adjustment_id %}">{% csrf_token %}<input type="hidden" name="period" value="{{ period|date:'Y-m-d' }}"><button class="btn btn-sm btn-quiet" type="submit">Accrue it again</button></form>{% endif %}</td>{% endif %}</tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<details class="card close-how-card close-collapse">
+  <summary class="card-head"><div><h2>How accruals are worked out</h2><p>Rules, in the order they apply</p></div></summary>
+  <div class="card-body rules-text small">
+    <p><strong>Received, not booked.</strong> Invoices and credit notes ShipMatch has received that belong to the period (dated on or before {{ period|date:"j M Y" }}, or for a shipment that shipped by then) and are not posted to QuickBooks with a bill date in the period. They are accrued at their own amount.</p>
+    <p><strong>Not yet invoiced.</strong> Shipments that shipped on or before {{ period|date:"j M Y" }} (on-board date on the bill of lading, else its issue date), within {{ report.settings.lookback_days }} days, and are missing charges that Month-end settings expect: {{ expected_text }}. Each missing group is estimated from the quote on file, else the vendor's median on the same lane and equipment, else your median per container, and shows its confidence.</p>
+    <p><strong>Not accrued.</strong> Rejected shipments, possible duplicate invoices, shipments without a shipping date, older shipments and charges someone marked as not needed are listed above instead.</p>
+    <p>The live report uses everything ShipMatch knows today, so invoices that arrived after the period end replace estimates. Locking stores the report as a version that never changes; locking again creates the next version.</p>
+  </div>
+</details>
+{% endblock %}

@@ -1,0 +1,9 @@
+<fieldset class="plain-fieldset">
+  <legend class="lbl">Events to send</legend>
+  <div class="pf-event-grid">
+    {% for t in event_types %}
+    <label class="check"><input type="checkbox" name="events" value="{{ t.key }}"{% if t.key in chosen %} checked{% endif %}>
+      <span><span class="mono small">{{ t.key }}</span><span class="sub">{{ t.description }}</span></span></label>
+    {% endfor %}
+  </div>
+</fieldset>

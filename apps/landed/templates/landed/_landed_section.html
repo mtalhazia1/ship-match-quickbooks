@@ -1,0 +1,101 @@
+{% load ui landed_tags %}{% landed_cost shipment as L %}{% with lc=L.lc %}
+<section class="card lc-section" id="landed-cost">
+  <div class="card-head">
+    <div><h2>Landed cost</h2>
+      <p>What each product really cost once freight, duties, insurance and handling are added, in {{ lc.currency }}.{% if lc.frozen_at %} Frozen when the shipment was approved, with that day's exchange rates.{% endif %}</p></div>
+    {% if lc.products %}
+    <div class="actions">
+      <a class="btn btn-sm" href="{% url 'landed:shipment_export' shipment.pk 'csv' %}">{% icon "download" %} CSV</a>
+      <a class="btn btn-sm" href="{% url 'landed:shipment_export' shipment.pk 'xlsx' %}">{% icon "download" %} Excel</a>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if lc.complete %}
+  <div class="lc-kpis">
+    <div><span class="k">Goods value</span><span class="v num">{{ lc.goods_total|money:lc.currency }}</span></div>
+    <div><span class="k">Charges</span><span class="v num">{{ lc.charges_total|money:lc.currency }}</span></div>
+    <div><span class="k">Landed cost</span><span class="v num">{{ lc.landed_total|money:lc.currency }}</span></div>
+    <div><span class="k">Uplift on goods</span><span class="v num">{{ lc.uplift|pct }}</span></div>
+  </div>
+  {% endif %}
+
+  <div class="card-body lc-body">
+    <p class="small lc-how">Charges are spread {{ lc.policy.describe }}{% if lc.policy.source == "shipment" %} (set for this shipment){% else %} (organization setting){% endif %}. Amounts are rounded so each charge is spread to the cent.</p>
+    {% for n in lc.notes %}<p class="lc-note small{% if n.level == 'warning' %} lc-warn{% endif %}">{% if n.level == "warning" %}{% icon "alert" %}{% else %}{% icon "info" %}{% endif %}<span>{{ n.text }}</span></p>{% endfor %}
+
+    {% if lc.products %}
+    <div class="table-wrap">
+      <table class="data compact lc-table">
+        <thead><tr>
+          <th>Product</th><th class="num">Qty</th><th class="num">Goods value</th>
+          {% for key, name in lc.categories %}<th class="num">{{ name }}</th>{% endfor %}
+          <th class="num">Landed cost</th><th class="num">Per unit</th><th class="num">Uplift</th>
+        </tr></thead>
+        <tbody>
+        {% for p in lc.products %}
+          <tr>
+            <td class="lc-prod"><strong>{{ p.description }}</strong>
+              <span class="sub">{% if p.sku %}SKU {{ p.sku }}{% endif %}{% if p.hs_code %}{% if p.sku %}, {% endif %}HS {{ p.hs_code }}{% endif %}{% if p.weight_kg is not None %}{% if p.sku or p.hs_code %}, {% endif %}{{ p.weight_kg|qty }} kg{% endif %}{% if p.volume_cbm is not None %}, {{ p.volume_cbm|qty }} cbm{% endif %}{% if p.currency and p.currency != lc.currency and not lc.frozen_at %}{% if p.sku or p.hs_code or p.weight_kg is not None %}, {% endif %}{{ p.value|money:p.currency }}{% endif %}</span></td>
+            <td class="num">{{ p.quantity|qty }}</td>
+            <td class="num">{{ p.value_home|money }}</td>
+            {% for key, name in lc.categories %}<td class="num">{{ p.allocated|lookup:key|default:"0.00"|money }}</td>{% endfor %}
+            <td class="num"><strong>{{ p.landed|money }}</strong></td>
+            <td class="num">{{ p.per_unit|unit_money }}</td>
+            <td class="num">{{ p.uplift|pct }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+        {% if lc.complete %}
+        <tfoot><tr>
+          <td><strong>Total</strong></td><td></td><td class="num"><strong>{{ lc.goods_total|money }}</strong></td>
+          {% for key, name in lc.categories %}<td class="num"><strong>{{ lc|lc_category_total:key|money }}</strong></td>{% endfor %}
+          <td class="num"><strong>{{ lc.landed_total|money }}</strong></td><td></td><td class="num"><strong>{{ lc.uplift|pct }}</strong></td>
+        </tr></tfoot>
+        {% endif %}
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if lc.charges %}
+  <details class="chart-table lc-charges">
+    <summary>{{ lc.charges|length }} charge{{ lc.charges|pluralize }} and how each was spread</summary>
+    <div class="table-wrap">
+      <table class="data compact">
+        <thead><tr><th>Charge</th><th>Type</th><th>From</th><th class="num">Amount</th><th class="num">In {{ lc.currency }}</th><th>Spread by</th></tr></thead>
+        <tbody>
+        {% for r in lc.charges %}
+          <tr><td>{{ r.charge.description|default:r.charge.code }}</td><td>{{ r.charge.category|category_label }}</td>
+            <td class="small">{{ r.charge.source }}</td>
+            <td class="num">{{ r.charge.amount|money:r.charge.currency }}</td><td class="num">{{ r.amount_home|money }}</td>
+            <td class="small">{% if r.used %}{{ r.used|method_word }}{% if r.fell_back %} <span class="muted">(asked: {{ r.basis|method_word }})</span>{% endif %}{% else %}<span class="muted">Not spread</span>{% endif %}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% endif %}
+
+  {% if can.edit and not shipment.is_locked %}
+  <div class="doc-foot lc-foot">
+    <details class="reveal lc-method" data-focus>
+      <summary class="btn btn-sm">Change how charges are spread on this shipment</summary>
+      <form class="pop-form" method="post" action="{% url 'landed:shipment_method' shipment.pk %}">{% csrf_token %}
+        <div class="form-grid lc-grid">
+          <div><label class="lbl" for="lc-method">Spread charges</label>
+            <select class="w-full" id="lc-method" name="method">{% for key, name in L.methods %}<option value="{{ key }}"{% if key == L.current.method %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></div>
+          {% for cat, name in L.category_choices %}
+          <div><label class="lbl" for="lc-cat-{{ cat }}">{{ name }}</label>
+            <select class="w-full" id="lc-cat-{{ cat }}" name="cat_{{ cat }}"><option value="">Default</option>{% for key, mname in L.methods %}<option value="{{ key }}"{% if L.current.by_category|lookup:cat == key %} selected{% endif %}>{{ mname }}</option>{% endfor %}</select></div>
+          {% endfor %}
+        </div>
+        <p class="hint">Organization setting: {{ L.org_policy.describe }}. Weight and volume come from the commercial invoice lines; where they are missing, value is used and the page says so.</p>
+        <div class="actions"><button class="btn btn-primary btn-sm" type="submit">Save for this shipment</button>
+          {% if L.override %}<button class="btn btn-sm btn-quiet" type="submit" name="action" value="clear" formnovalidate>Use the organization setting</button>{% endif %}</div>
+      </form>
+    </details>
+  </div>
+  {% endif %}
+</section>
+{% endwith %}

@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% load ui review_tags intake_tags %}
+{% block title %}{{ doc.original_filename }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'review:documents' %}?view=all">Documents</a>{% icon "chevron-right" %}<span>{{ doc.original_filename }}</span></div>
+    <div class="actions" style="gap:12px"><h1>{{ doc.original_filename }}</h1>
+      <span class="badge neutral">{% if doc.status == 'split' %}Split into {{ rows|length }} documents{% else %}ZIP archive{% endif %}</span></div>
+    <dl class="meta-grid">
+      <div><dt>Received</dt><dd>{{ doc.received_at|date:"j M Y, H:i" }}</dd></div>
+      <div><dt>Source</dt><dd>{{ doc.get_source_display }}{% if doc.email %} from {{ doc.email.sender }}{% endif %}</dd></div>
+      {% if doc.status == 'split' %}<div><dt>Pages</dt><dd>{{ doc.page_count|default:"–" }}</dd></div>
+      {% else %}<div><dt>Files inside</dt><dd>{{ doc.intake.members|length }}</dd></div>{% endif %}
+      <div><dt>Documents made from it</dt><dd>{{ rows|length }}</dd></div>
+    </dl>
+    {% include "intake/_origin.html" with d=doc %}
+  </div>
+</div>
+
+{% if doc.status == 'split' %}
+<div class="decision">{% icon "info" %}
+  <div class="grow">
+    <strong>This PDF held {{ rows|length }} separate documents, so each one became a document of its own.</strong>
+    Each part is read, matched to its shipment and checked on its own. The original file stays here for the audit trail.
+    {% if split.boundaries %}<ul class="split-why">{% for b in split.boundaries %}<li>A new document starts on page {{ b.page }}: {{ b.reasons|join:"; " }}.</li>{% endfor %}</ul>{% endif %}
+  </div>
+  {% if can.edit %}
+  <div class="decision-actions">
+    {% if locked %}
+      <span class="small muted">Part of it is in an approved shipment, so it can't be joined again.</span>
+    {% else %}
+    <details class="reveal" data-focus>
+      <summary class="btn">Keep as one document</summary>
+      <form class="pop-form" method="post" action="{% url 'intake:keep_whole' doc.pk %}">{% csrf_token %}
+        <p class="small">The {{ rows|length }} parts, and any values typed on them, are removed. The whole file is then read again as one document.</p>
+        <button class="btn btn-primary" type="submit">Keep as one document</button>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<div class="decision">{% icon "info" %}
+  <div class="grow">
+    <strong>This ZIP held {{ doc.intake.members|length }} file{{ doc.intake.members|length|pluralize }}.</strong>
+    {{ archive.added|length }} became document{{ archive.added|length|pluralize }}{% if archive.duplicate %}, {{ archive.duplicate|length }} had been received before{% endif %}{% if archive.skipped %}, {{ archive.skipped|length }} could not be added{% endif %}{% if archive.ignored %}, {{ archive.ignored|length }} system or hidden file{{ archive.ignored|length|pluralize }} {{ archive.ignored|length|pluralize:"was,were" }} ignored{% endif %}.
+  </div>
+</div>
+{% endif %}
+
+<div class="review-grid">
+  <div class="stack intake-stack">
+    <section class="card">
+      <div class="card-head"><div><h2>Documents from this file</h2><p>Open one to see its values and its shipment.</p></div></div>
+      {% if rows %}
+      <div class="table-wrap">
+        <table class="data intake-docs">
+          <thead><tr><th>Document</th><th>Type</th><th>Status</th><th>Shipment</th></tr></thead>
+          <tbody>
+          {% for r in rows %}{% with d=r.doc %}
+            <tr>
+              <td>{% if d %}<a class="row-link wrap" href="{% url 'review:document' d.pk %}">{{ d.original_filename }}</a>{% else %}<span class="muted">{{ r.name|default:"Removed" }}</span>{% endif %}
+                {% if r.pages %}<span class="sub">{{ r.pages|pages_label|capfirst }}</span>{% elif r.folder %}<span class="sub">In folder {{ r.folder }}</span>{% endif %}
+                {% if r.duplicate %}<span class="sub">Received before, not added again</span>{% endif %}</td>
+              <td class="nowrap">{% if d %}{{ d.get_doc_type_display }}{% endif %}</td>
+              <td>{% if not d %}<span class="muted">–</span>
+                {% elif d.status == 'matched' %}<span class="badge ok">In shipment</span>
+                {% elif d.status == 'error' %}<span class="badge err">Couldn't read</span>
+                {% elif d.status == 'received' %}<span class="badge neutral">Processing</span>
+                {% elif d.status == 'split' or d.status == 'archive' %}<span class="badge neutral">{{ d.get_status_display }}</span>
+                {% else %}<span class="badge warn">{{ d.get_status_display }}</span>{% endif %}</td>
+              <td class="nowrap">{% if d and d.match %}<a href="{% url 'review:shipment' d.match.shipment_id %}">{{ d.match.shipment.reference }}</a>{% else %}<span class="muted">–</span>{% endif %}</td>
+            </tr>
+          {% endwith %}{% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}<div class="card-body muted">No documents were made from this file.</div>{% endif %}
+    </section>
+
+    {% if archive.skipped %}
+    <section class="card">
+      <div class="card-head"><div><h2>Not added</h2><p>Send these again as PDF, image or spreadsheet files.</p></div></div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>File in the ZIP</th><th>Why</th><th class="num">Size</th></tr></thead>
+          <tbody>{% for m in archive.skipped %}<tr><td class="wrap-cell">{{ m.name }}</td><td>{{ m.reason|capfirst }}</td><td class="num nowrap">{{ m.size|kb }}</td></tr>{% endfor %}</tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+    {% if archive.ignored %}
+    <section class="card">
+      <details class="chart-table">
+        <summary>{{ archive.ignored|length }} system or hidden file{{ archive.ignored|length|pluralize }} ignored</summary>
+        <table class="data"><tbody>{% for m in archive.ignored %}<tr><td class="wrap-cell">{{ m.name }}</td><td class="num nowrap">{{ m.size|kb }}</td></tr>{% endfor %}</tbody></table>
+      </details>
+    </section>
+    {% endif %}
+
+    <section class="card">
+      <div class="card-head"><h2>Activity</h2></div>
+      {% if timeline %}
+      <ol class="timeline">{% for e in timeline %}<li><div><strong>{{ e.who }}</strong> {{ e.text }}</div><div class="when">{{ e.at|date:"j M Y, H:i" }}</div></li>{% endfor %}</ol>
+      {% else %}<div class="card-body muted">No activity yet.</div>{% endif %}
+    </section>
+  </div>
+  <aside class="viewer" aria-label="Source document">
+    <div class="viewer-head"><strong>{% if doc.status == 'archive' %}Contents of {{ doc.original_filename }}{% else %}{{ doc.original_filename }}{% endif %}</strong>
+      <a class="btn btn-sm btn-quiet" href="{% url 'review:document_file' doc.pk %}" target="_blank" rel="noopener">{% icon "external" %} Open</a></div>
+    <iframe title="Source document" src="{% url 'review:document_file' doc.pk %}"></iframe>
+  </aside>
+</div>
+{% endblock %}

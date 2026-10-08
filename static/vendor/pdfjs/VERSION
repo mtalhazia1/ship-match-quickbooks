@@ -1,0 +1,6 @@
+pdfjs-dist 6.3.289, legacy build (works in current and older Chrome, Edge, Firefox and Safari).
+From: npm pack pdfjs-dist@6.3.289
+Files: legacy/build/pdf.min.mjs, legacy/build/pdf.worker.min.mjs, LICENSE (Apache-2.0),
+wasm/jbig2.wasm, wasm/jbig2_nowasm_fallback.js and wasm/openjpeg.wasm (decoders for fax/JBIG2 and
+JPEG 2000 scans, loaded by the worker only when a page needs them) with their licenses.
+Not included: the viewer app, source maps, cmaps, standard fonts, scripting.

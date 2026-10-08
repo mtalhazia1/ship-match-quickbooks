@@ -1,0 +1,11 @@
+{% autoescape off %}{{ m.title }}
+
+{{ m.text }}
+{% if m.facts %}
+{% for f in m.facts %}{{ f.0 }}: {{ f.1 }}
+{% endfor %}{% endif %}{% if m.url %}
+{{ m.link_label }}: {{ m.url }}
+{% endif %}
+--
+{{ footer }}. Change which alerts you get in ShipMatch under Settings > Alerts.
+{% endautoescape %}

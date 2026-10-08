@@ -1,0 +1,4 @@
+<span class="badge {% if d.status == 'succeeded' %}ok{% elif d.status == 'failed' %}err{% else %}warn{% endif %}">{{ d.get_status_display }}{% if d.response_status %}, HTTP {{ d.response_status }}{% endif %}</span>
+{% if d.duration_ms is not None %}<span class="muted small nowrap">{{ d.duration_ms }} ms</span>{% endif %}
+{% if d.error %}<span class="sub">{{ d.error|truncatechars:180 }}</span>{% endif %}
+{% if d.status == 'retrying' and d.next_attempt_at %}<span class="sub">Next try {{ d.next_attempt_at|date:"j M, H:i" }}</span>{% endif %}

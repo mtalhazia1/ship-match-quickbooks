@@ -1,0 +1,15 @@
+{% load ui intake_tags %}{% if can.upload %}
+<form class="dropzone" data-dropzone method="post" action="{% url 'review:upload' %}" enctype="multipart/form-data">
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+  {% icon "upload" %}
+  <div class="grow">
+    <strong>Add documents</strong>
+    <span class="small muted">Drop PDFs, photos, spreadsheets or ZIP files here, or choose files. Invoices, credit notes and bills of lading are read and matched automatically.</span>
+  </div>
+  <label class="sr-only" for="upload-files">Files ({% supported_types %})</label>
+  <input id="upload-files" type="file" name="files" accept="{% accept_types %}" multiple required>
+  <span class="small muted" data-file-status></span>
+  <button class="btn btn-primary" type="submit">Upload</button>
+</form>
+{% endif %}

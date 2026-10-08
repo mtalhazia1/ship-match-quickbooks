@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Webhooks{% endblock %}
+{% block content %}
+{% include "settings/_nav.html" %}
+
+<div class="grid-side pf-webhooks">
+  <div class="stack fluid">
+    <section class="card">
+      <div class="card-head">
+        <div><h2>Webhook endpoints</h2><p>ShipMatch sends a signed JSON message to these addresses when something happens, so your ERP, data warehouse or automation tool can react without polling the API.</p></div>
+      </div>
+      {% if endpoints %}
+      <div class="table-wrap">
+        <table class="data pf-endpoints">
+          <thead><tr><th>Address</th><th>Events</th><th>Last delivery</th><th></th></tr></thead>
+          <tbody>
+          {% for ep in endpoints %}
+          <tr>
+            <td><a class="row-link wrap" href="{% url 'integrations:webhook_edit' ep.pk %}">{{ ep.display_url }}</a>
+              {% if not ep.enabled %}<span class="badge err">Off</span>{% endif %}
+              {% if ep.description %}<span class="sub">{{ ep.description }}</span>{% endif %}
+              {% if ep.disabled_reason and not ep.enabled %}<span class="sub">{{ ep.disabled_reason }}</span>{% endif %}</td>
+            <td><div class="tags">{% for e in ep.events|slice:":4" %}<span class="tag alert-tag mono">{{ e }}</span>{% endfor %}{% if ep.events|length > 4 %}<span class="tag alert-tag">and {{ ep.events|length|add:"-4" }} more</span>{% endif %}</div></td>
+            <td class="nowrap">{% with d=ep.last_delivery %}{% if d %}
+              <span class="badge {% if d.status == 'succeeded' %}ok{% elif d.status == 'failed' %}err{% else %}warn{% endif %}">{{ d.get_status_display }}{% if d.response_status %}, HTTP {{ d.response_status }}{% endif %}</span>
+              <span class="sub">{{ d.created_at|date:"j M, H:i" }}</span>{% else %}<span class="muted">Never</span>{% endif %}{% endwith %}</td>
+            <td class="nowrap"><a class="btn btn-sm btn-quiet" href="{% url 'integrations:webhook_edit' ep.pk %}">Open</a></td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">{% icon "send" %}<h3>No endpoints yet</h3>
+        <p class="muted">Add one below to send events such as "shipment approved" or "bill posted" to another system.</p></div>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Add an endpoint</h2><p>Up to {{ max_endpoints }}. The address must be public and use https.</p></div></div>
+      {% if not allowed %}
+      <div class="card-body"><p class="pf-note pf-note-warning">{% icon "lock" %}<span>Outgoing webhooks are part of the Growth and Scale plans. An admin can change the plan in <a href="{% url 'billing:settings' %}">Settings, Billing</a>.</span></p></div>
+      {% elif endpoints|length >= max_endpoints %}
+      <div class="card-body muted">You have {{ max_endpoints }} endpoints, the most an organization can have. Remove one to add another.</div>
+      {% else %}
+      <form method="post" class="card-body stack pf-endpoint-form">{% csrf_token %}
+        <div class="form-grid">
+          <div><label class="lbl" for="wh-url">Address</label>
+            <input class="w-full mono" id="wh-url" type="text" name="url" value="{{ form.url|default:'' }}" maxlength="2000" placeholder="https://erp.example.com/hooks/shipmatch" autocomplete="off" inputmode="url" required>
+            <p class="hint">https on port 443 or 8443. ShipMatch checks it resolves to a public address.</p></div>
+          <div><label class="lbl" for="wh-desc">Description <span class="muted">(optional)</span></label>
+            <input class="w-full" id="wh-desc" type="text" name="description" value="{{ form.description|default:'' }}" maxlength="200" placeholder="For example: NetSuite sync"></div>
+        </div>
+        {% include "integrations/_event_choices.html" with chosen=form.events %}
+        <div><button class="btn btn-primary" type="submit">{% icon "plus" %} Add endpoint</button></div>
+      </form>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Recent deliveries</h2><p>The last 30, with what each endpoint answered. Open an endpoint to replay a delivery.</p></div></div>
+      {% if deliveries %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Time</th><th>Event</th><th>Endpoint</th><th>Result</th><th class="num">Tries</th></tr></thead>
+          <tbody>
+          {% for d in deliveries %}
+          <tr>
+            <td class="nowrap">{{ d.created_at|date:"j M, H:i:s" }}</td>
+            <td><span class="mono small">{{ d.event.type }}</span>{% if d.replay_of_id %} <span class="badge neutral">Replay</span>{% endif %}{% if d.is_test %} <span class="badge neutral">Test</span>{% endif %}</td>
+            <td><a href="{% url 'integrations:webhook_edit' d.endpoint_id %}">{{ d.endpoint.host }}</a></td>
+            <td>{% include "integrations/_delivery_result.html" %}</td>
+            <td class="num">{{ d.attempts }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}<div class="card-body muted">Nothing sent yet.</div>{% endif %}
+    </section>
+  </div>
+
+  <div class="stack fluid">
+    <section class="card">
+      <div class="card-head"><h2>How events are sent</h2></div>
+      <div class="card-body small pf-howto">
+        <p>Each event is a <code>POST</code> with a JSON body: <code>id</code>, <code>type</code>, <code>created</code>, <code>organization</code> and <code>data.object</code>, a summary with references, status, amounts and a link. Never document text or files.</p>
+        <p>Headers <code>ShipMatch-Timestamp</code> and <code>ShipMatch-Signature</code> (<code>v1=</code> HMAC-SHA256 of <code>timestamp.body</code> with the endpoint's secret) prove it came from ShipMatch.</p>
+        <p>Answer with HTTP 2xx within {{ timeout|floatformat:0 }} seconds. Anything else is retried with growing pauses, up to {{ max_attempts }} attempts. After {{ disable_after }} failures in a row the endpoint is turned off and admins get an email.</p>
+        <p>The same event can arrive twice (retries, replays): use its <code>id</code> to skip repeats. The README has a verification example.</p>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

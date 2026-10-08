@@ -1,0 +1,21 @@
+<form class="{% if inline %}close-vendor-form{% else %}pop-form{% endif %}" method="post" action="{% url 'close:statement_edit' st.pk %}">{% csrf_token %}
+  <label class="lbl" for="st-vendor{{ inline|yesno:'-i,' }}">Vendor</label>
+  <select id="st-vendor{{ inline|yesno:'-i,' }}" name="vendor" required>
+    <option value="">Choose the vendor</option>
+    {% for k, name in vendors %}<option value="{{ name }}"{% if k == st.vendor_key %} selected{% endif %}>{{ name }}</option>{% endfor %}
+  </select>
+  {% if not inline %}
+  <label class="lbl" for="st-date">Statement date</label>
+  <input id="st-date" type="date" name="statement_date" value="{{ st.statement_date|date:'Y-m-d' }}">
+  <label class="lbl" for="st-cur">Currency</label>
+  <input id="st-cur" type="text" name="currency" value="{{ st.currency }}" maxlength="3" size="4">
+  <label class="lbl" for="st-closing">Balance printed on the statement</label>
+  <input id="st-closing" type="text" name="closing_balance" inputmode="decimal" value="{% if st.closing_balance is not None %}{{ st.closing_balance }}{% endif %}">
+  <p class="hint">Leave the balance empty to use the sum of the lines.</p>
+  {% else %}
+  <input type="hidden" name="statement_date" value="{{ st.statement_date|date:'Y-m-d' }}">
+  <input type="hidden" name="currency" value="{{ st.currency }}">
+  <input type="hidden" name="closing_balance" value="{% if st.closing_balance is not None %}{{ st.closing_balance }}{% endif %}">
+  {% endif %}
+  <button class="btn btn-primary btn-sm" type="submit">{% if inline %}Match with this vendor{% else %}Save and match again{% endif %}</button>
+</form>

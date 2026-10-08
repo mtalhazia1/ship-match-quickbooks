@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Review queue{% for k, label, n in tabs %}{% if k == tab %} – {{ label }}{% endif %}{% endfor %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Review queue</h1>
+    <p class="lede">Each shipment groups its bill of lading and invoices. Fix or accept issues, then approve.</p>
+  </div>
+  {% if loose_count %}
+  <a class="btn" href="{% url 'review:documents' %}">{% icon "file" %} {{ loose_count }} document{{ loose_count|pluralize }} not in a shipment</a>
+  {% endif %}
+  {% include "integrations/_export_menu.html" with kind="shipments" %}
+</div>
+
+{% include "includes/upload.html" %}
+
+<nav class="tabs" aria-label="Shipment status" style="margin-top:18px">
+  {% for key, name, n in tabs %}
+  <a href="?{% if tab_query %}{{ tab_query }}&amp;{% endif %}status={{ key }}" class="{% if key == tab %}on{% endif %}"{% if key == tab %} aria-current="page"{% endif %}>{{ name }}<span class="n">{{ n }}</span></a>
+  {% endfor %}
+</nav>
+
+<form class="filters" method="get">
+  <input type="hidden" name="status" value="{{ tab }}">
+  <label class="sr-only" for="q">Search this list</label>
+  <input id="q" type="search" name="q" value="{{ q }}" placeholder="Reference, B/L, container, PO, vendor or file">
+  <label class="sr-only" for="sort">Sort</label>
+  <select id="sort" name="sort" data-autosubmit>
+    {% for key, name in sorts %}<option value="{{ key }}"{% if key == sort %} selected{% endif %}>{{ name }}</option>{% endfor %}
+  </select>
+  {% include "accounting/_payment_filter.html" %}
+  <button class="btn" type="submit">{% icon "search" %} Search</button>
+  {% if q %}<a class="btn btn-quiet" href="?status={{ tab }}">Clear</a>{% endif %}
+</form>
+
+{% include "workflow/_queue_toolbar.html" %}
+
+<section class="card">
+  {% if page.object_list %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr>
+        {% include "workflow/_queue_cell.html" with part="check-head" %}
+        <th>Shipment</th><th>Status</th><th>Bill of lading</th><th>Containers</th><th>PO</th>
+        <th class="num">Documents</th><th>Open issues</th><th>Payments</th><th>Updated</th>
+        {% include "workflow/_queue_cell.html" with part="assignee-head" %}
+      </tr></thead>
+      <tbody>
+      {% for s in page %}
+        <tr>
+          {% include "workflow/_queue_cell.html" with part="check" %}
+          <td><a class="row-link" href="{% url 'review:shipment' s.pk %}">{{ s.reference }}</a></td>
+          <td>{% include "includes/status.html" %}</td>
+          <td class="nowrap">{{ s.bl_number|default:"Not received" }}</td>
+          <td>{{ s.container_numbers|join:", "|default:"–" }}</td>
+          <td class="nowrap">{{ s.po_numbers|join:", "|default:"–" }}</td>
+          <td class="num">{{ s.n_docs }}</td>
+          <td><div class="tags">
+            {% if s.n_errors %}<span class="tag error">{{ s.n_errors }} error{{ s.n_errors|pluralize }}</span>{% endif %}
+            {% if s.n_warnings %}<span class="tag warning">{{ s.n_warnings }} warning{{ s.n_warnings|pluralize }}</span>{% endif %}
+            {% if not s.n_errors and not s.n_warnings %}<span class="muted small">None</span>{% endif %}
+          </div></td>
+          {% include "accounting/_payment_cell.html" %}
+          <td class="nowrap muted" title="{{ s.updated_at|date:'j M Y, H:i' }}">{{ s.updated_at|timesince }} ago</td>
+          {% include "workflow/_queue_cell.html" with part="assignee" %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "includes/pager.html" %}
+  {% else %}
+  <div class="empty">
+    {% icon "inbox" %}
+    {% if q %}<h3>No shipments match “{{ q }}”</h3><p class="muted">Try a shorter search, or look in another tab.</p>
+    {% elif tab == "needs_review" %}<h3>Nothing needs review</h3><p class="muted">New documents are read and matched automatically. Upload PDFs above or forward them to your intake mailbox.</p>
+    {% else %}<h3>No shipments here yet</h3>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% load static ui %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Sign in{% endblock %} – ShipMatch</title>
+  <link rel="icon" href="{% static 'img/favicon.svg' %}" type="image/svg+xml">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <script src="{% static 'js/app.js' %}" defer></script>
+  {% block head %}{% endblock %}
+  {% block scripts %}{% endblock %}
+</head>
+<body data-tz="{{ timezone_name }}" data-tz-source="{{ timezone_source }}">
+{% include "demo/_banner.html" %}
+<div class="auth">
+  <section class="auth-art" aria-hidden="true">
+    <span class="brand">
+      <span class="brand-mark"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="1" fill="none" stroke="#102a43" stroke-width="2"/><path d="M6.5 8.5v7M10 8.5v7M13.5 8.5v7M17 8.5v7" stroke="#102a43" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+      <span><span class="brand-name">ShipMatch</span><span class="brand-sub">Freight AP reconciliation</span></span>
+    </span>
+    <blockquote>Every freight invoice checked against its shipment before anyone pays it.</blockquote>
+    <div class="facts">
+      <div>{% icon "file" %}<span>Reads commercial invoices, bills of lading and freight invoices as they arrive.</span></div>
+      <div>{% icon "alert" %}<span>Flags totals, container numbers and duplicates that don't add up.</span></div>
+      <div>{% icon "check" %}<span>Posts approved bills to QuickBooks with the source PDF attached.</span></div>
+    </div>
+  </section>
+  <section class="auth-panel">
+    <div class="auth-box">
+      {% include "includes/messages.html" %}
+      {% block content %}{% endblock %}
+    </div>
+  </section>
+</div>
+</body>
+</html>

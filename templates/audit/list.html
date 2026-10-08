@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Audit log{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Audit log</h1>
+    <p class="lede">Every sign-in, edit, decision and setting change, with who did it, when and from where. Entries can't be edited or deleted.</p>
+  </div>
+  <a class="btn" href="{% url 'core:audit_export' %}{% if query %}?{{ query }}{% endif %}">{% icon "download" %} Export CSV</a>
+</div>
+
+<form class="filters" method="get">
+  <label class="sr-only" for="actor">Person</label>
+  <select id="actor" name="actor">
+    <option value="">Everyone</option>
+    {% for m in members %}<option value="{{ m.user_id }}"{% if f.actor == m.user_id|stringformat:"s" %} selected{% endif %}>{{ m.user|display_name }}</option>{% endfor %}
+  </select>
+  <label class="sr-only" for="action">Type of event</label>
+  <select id="action" name="action">
+    <option value="">All events</option>
+    {% for prefix, name in groups %}<option value="{{ prefix }}"{% if f.action == prefix %} selected{% endif %}>{{ name }}</option>{% endfor %}
+  </select>
+  <label class="small muted" for="from">From</label><input id="from" type="date" name="from" value="{{ f.from }}">
+  <label class="small muted" for="to">To</label><input id="to" type="date" name="to" value="{{ f.to }}">
+  <label class="sr-only" for="q">Search</label>
+  <input id="q" type="search" name="q" value="{{ f.q }}" placeholder="Object ID, event or request ID">
+  <button class="btn" type="submit">Filter</button>
+  {% if query %}<a class="btn btn-quiet" href="{% url 'core:audit' %}">Clear</a>{% endif %}
+</form>
+
+<section class="card">
+  {% if page.object_list %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Time</th><th>Person</th><th>What happened</th><th>Record</th><th>From</th></tr></thead>
+      <tbody>
+      {% for e in page %}
+      <tr>
+        <td class="nowrap num">{{ e.created_at|date:"j M Y" }}<span class="sub">{{ e.created_at|date:"H:i:s" }}</span></td>
+        <td class="nowrap">{% if e.actor %}{{ e.actor|display_name }}{% elif e.data.username %}{{ e.data.username }}<span class="sub">Not signed in</span>{% elif e.data.api_key %}API key {{ e.data.api_key }}{% else %}<span class="muted">ShipMatch</span>{% endif %}</td>
+        <td>{{ e.description|capfirst }}
+          {% if e.data.note %}<span class="sub">“{{ e.data.note|truncatechars:160 }}”</span>{% endif %}
+          <span class="sub mono">{{ e.action }}</span></td>
+        <td class="nowrap">{% if e.object_type == "Shipment" %}<a href="{% url 'review:shipment' e.object_id %}">Shipment {{ e.object_id }}</a>
+          {% elif e.object_type == "Document" %}<a href="{% url 'review:document' e.object_id %}">Document {{ e.object_id }}</a>
+          {% elif e.object_type == "str" or e.object_type == "User" %}<span class="muted">Account</span>
+          {% else %}{{ e.object_type }} {{ e.object_id|truncatechars:24 }}{% endif %}</td>
+        <td class="nowrap small muted">{{ e.ip|default:"–" }}<span class="sub mono" title="Request ID">{{ e.request_id|truncatechars:14 }}</span></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "includes/pager.html" %}
+  {% else %}
+  <div class="empty">{% icon "shield" %}<h3>No events match these filters</h3></div>
+  {% endif %}
+</section>
+{% endblock %}

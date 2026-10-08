@@ -1,0 +1,6 @@
+<div class="field{% if field.errors %} has-error{% endif %}{% if wide %} span-2{% endif %}">
+  <label class="lbl" for="{{ field.id_for_label }}">{{ field.label }}{% if not field.field.required %} <span class="muted small">(optional)</span>{% endif %}</label>
+  {{ field }}
+  {% if hint %}<p class="hint">{{ hint }}</p>{% elif field.help_text %}<p class="hint">{{ field.help_text }}</p>{% endif %}
+  {% if field.errors %}<ul class="errorlist">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+</div>

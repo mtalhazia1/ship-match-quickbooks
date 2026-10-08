@@ -1,0 +1,1 @@
+{% if demo_mode %}<div class="demo-banner" role="note"><span>Demo environment. Data resets every night.</span>{% if try_enabled and not on_try_page %} <a href="{% url 'demo:try' %}">Try it on your own invoice</a>{% endif %}</div>{% endif %}

@@ -1,0 +1,40 @@
+# Web
+Django>=5.2.8,<5.3      # 5.2 LTS; 5.2.8+ supports Python 3.14
+django-ninja>=1.3
+dj-database-url>=2.2
+django-storages[s3]>=1.14
+python-dotenv>=1.0
+whitenoise>=6.7          # serves static files in production
+cryptography>=42.0     # encrypts QuickBooks tokens and 2FA secrets at rest
+pyotp>=2.9             # two-factor authentication (TOTP)
+segno>=1.6             # QR codes for 2FA enrollment
+gunicorn>=22.0; sys_platform != "win32"   # production server (Linux/Docker only)
+
+# Data / jobs
+psycopg[binary]>=3.2
+celery>=5.4
+redis>=5.0
+
+# Documents and AI
+pydantic>=2.6
+pdfplumber>=0.11
+boto3>=1.34            # AWS Textract (optional, for scanned PDFs)
+httpx>=0.27            # LLM + QuickBooks HTTP calls
+rapidfuzz>=3.6
+
+# Email
+google-api-python-client>=2.120
+google-auth-oauthlib>=1.2
+
+# Intake of messy inputs (pure Python)
+pypdf>=3.17            # split PDFs that hold several invoices; count pages
+openpyxl>=3.1          # read .xlsx invoices
+defusedxml>=0.7        # openpyxl uses it to refuse harmful XML in .xlsx files
+
+# Synthetic dataset, PDF copies of spreadsheets, photos converted to PDF
+reportlab>=4.1
+Pillow>=10.0           # scanned-look PDFs; photos and scans (JPG, PNG, TIFF, WebP) to PDF
+
+# Tests
+pytest>=8.0
+pytest-django>=4.8

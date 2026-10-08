@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% load ui review_tags evidence_tags %}
+{% block title %}{{ shipment.reference }}{% endblock %}
+{% block scripts %}{% include "evidence/_scripts.html" %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'review:queue' %}?status={{ shipment.status }}">Review queue</a>{% icon "chevron-right" %}<span>{{ shipment.reference }}</span></div>
+    <div class="actions" style="gap:12px"><h1>{{ shipment.reference }}</h1>{% if shipment.status == "ready" and blockers %}<span class="badge warn" title="Every check passed or was accepted, but something else has to happen before it can be approved. See the box below.">Waiting on a step</span>{% else %}{% include "includes/status.html" with s=shipment %}{% endif %}</div>
+    <dl class="meta-grid">
+      <div><dt>Bill of lading</dt><dd>{{ shipment.bl_number|default:"Not received" }}</dd></div>
+      <div><dt>Containers</dt><dd>{{ shipment.container_numbers|join:", "|default:"–" }}</dd></div>
+      <div><dt>Purchase orders</dt><dd>{{ shipment.po_numbers|join:", "|default:"–" }}</dd></div>
+      <div><dt>Payable total</dt><dd>
+        {% for cur, amount in totals.by_currency.items %}{{ amount|money:cur }}{% if not forloop.last %}, {% endif %}{% empty %}–{% endfor %}
+        {% if totals.home is not None and totals.by_currency|length > 1 %}<span class="muted small">({{ totals.home|money:org.home_currency }})</span>{% endif %}
+      </dd></div>
+      {% include "intake/_credit_totals.html" %}
+      <div><dt>Documents</dt><dd>{{ docs|length }}</dd></div>
+    </dl>
+  </div>
+</div>
+
+{# ---------------------------------------------------------------- decision panel #}
+{% if shipment.status == "posted" %}
+  <div class="decision done">{% icon "check" %}<div class="grow"><strong>Posted to accounting.</strong>
+    Approved by {{ shipment.approved_by|display_name }} on {{ shipment.approved_at|date:"j M Y, H:i" }}. Posted shipments are read only.</div></div>
+{% elif shipment.status == "approved" %}
+  <div class="decision done">{% icon "check" %}
+    <div class="grow"><strong>Approved</strong> by {{ shipment.approved_by|display_name }} on {{ shipment.approved_at|date:"j M Y, H:i" }}.
+      The shipment is locked. {% if can.post %}Post its bills when you're ready.{% endif %}
+      {% if post_summary %}<br><strong>{{ post_summary.posted }} of {{ post_summary.total }} bill{{ post_summary.total|pluralize }} posted{% if post_summary.failed %}; {{ post_summary.failed }} failed{% endif %}.</strong>{% if post_summary.failed %} The reason is on the document card below.{% endif %}{% endif %}</div>
+    <div class="decision-actions">
+      {% if can.post %}
+        {% if qbo and qbo.needs_reconnect %}
+          {% if can.manage %}<a class="btn btn-primary" href="{% url 'accounting:settings' org.pk %}">Reconnect {{ qbo.system_name }} to post</a>
+          {% else %}<span class="small muted">{{ qbo.system_name }} needs to be connected again by an admin.</span>{% endif %}
+        {% elif qbo %}
+        <form method="post" action="{% url 'review:post' shipment.pk %}">{% csrf_token %}<button class="btn btn-primary" type="submit">{% icon "send" %} Post bills to {{ qbo.system_name }}</button></form>
+        {% elif can.manage %}<a class="btn btn-primary" href="{% url 'accounting:settings' org.pk %}">Connect an accounting system to post</a>
+        {% else %}<span class="small muted">An admin needs to connect QuickBooks or Xero before bills can be posted.</span>{% endif %}
+      {% endif %}
+      {% if can.approve %}<form method="post" action="{% url 'review:reopen' shipment.pk %}">{% csrf_token %}<button class="btn" type="submit">Reopen for changes</button></form>{% endif %}
+    </div>
+  </div>
+{% elif shipment.status == "rejected" %}
+  <div class="decision rejected">{% icon "x" %}
+    <div class="grow"><strong>Rejected.</strong>{% with a=approvals.0 %}{% if a %} {{ a.user|display_name }} on {{ a.created_at|date:"j M Y, H:i" }}: “{{ a.note }}”{% endif %}{% endwith %}</div>
+    {% if can.approve %}<div class="decision-actions"><form method="post" action="{% url 'review:reopen' shipment.pk %}">{% csrf_token %}<button class="btn" type="submit">Reopen</button></form></div>{% endif %}
+  </div>
+{% else %}
+  <div class="decision {% if blockers %}blocked{% else %}ready{% endif %}">
+    {% if blockers %}{% icon "alert" %}{% else %}{% icon "check" %}{% endif %}
+    <div class="grow">
+      {% if blockers %}
+        <strong>{% if can.approve %}You can't approve this yet{% else %}Not ready for approval{% endif %}</strong>
+        <ul>{% for b in blockers %}<li>{{ b }}</li>{% endfor %}</ul>
+      {% else %}
+        <strong>Ready to approve.</strong> All checks passed or were accepted. Approving locks the shipment and makes its bills ready to post.
+      {% endif %}
+    </div>
+    {% if can.approve %}
+    <div class="decision-actions">
+      <details class="reveal" data-focus>
+        <summary class="btn btn-danger">Reject</summary>
+        <form class="pop-form" method="post" action="{% url 'review:reject' shipment.pk %}">{% csrf_token %}
+          <label class="lbl" for="reject-note">Reason for rejecting</label>
+          <textarea id="reject-note" name="note" minlength="{{ reject_min }}" maxlength="500" required placeholder="For example: freight invoice billed for the wrong vessel; asked the forwarder for a corrected copy."></textarea>
+          <button class="btn btn-danger solid" type="submit">Reject shipment</button>
+        </form>
+      </details>
+      {% if not blockers %}
+      <form method="post" action="{% url 'review:approve' shipment.pk %}" data-wf-confirm="wf-approve-dialog">{% csrf_token %}
+        <button class="btn btn-primary" type="submit">{% icon "check" %} Approve</button>
+      </form>
+      {% else %}<button class="btn btn-primary" type="button" disabled>{% icon "check" %} Approve</button>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+{% endif %}
+
+{% include "accounting/_shipment_payments.html" %}
+{% include "workflow/_shipment_assign.html" %}
+
+{# ---------------------------------------------------------------- issues #}
+{% if open_issues or resolved_issues %}
+<section class="card" id="issues" style="margin-bottom:20px">
+  <div class="card-head">
+    <div><h2>{% if open_issues %}Issues to resolve <span class="muted num">{{ open_issues|length }}</span>{% else %}All issues resolved{% endif %}</h2>
+      <p>Fix a value in the document below, or accept the issue if the document is right.{% if open_errors %} Errors need an approver to override them.{% endif %}</p>
+      {% if pending_splits %}<p class="hint">The container errors come from shared invoice {{ pending_splits|join:", " }}, which also covers other shipments. Confirm the split under <a href="#shared-invoices">Shared invoices</a> and they clear by themselves.</p>{% endif %}</div>
+  </div>
+  {% for i in open_issues %}
+  <div class="issue">
+    <span class="sev tag {{ i.severity }}">{% if i.severity == "error" %}{% icon "alert-circle" %} Error{% else %}{% icon "alert" %} Warning{% endif %}</span>
+    <div>
+      <h4>{{ i.title }}</h4>
+      <p>{{ i.message }}</p>
+      {% if i.guidance %}<p class="guide">{{ i.guidance }}</p>{% endif %}
+      {% if i.document_id %}<p class="small" style="margin-top:4px"><a href="#doc-{{ i.document_id }}">{{ i.document.get_doc_type_display }}: {{ i.document.original_filename }}</a></p>{% endif %}
+    </div>
+    <div class="act">
+      {% evidence_issue_button i %}
+      {% if not shipment.is_locked and shipment.status != "rejected" %}
+        {% if i.severity == "warning" and can.accept_warning %}
+          <form method="post" action="{% url 'review:resolve_issue' i.pk %}">{% csrf_token %}<button class="btn btn-sm" type="submit">Accept</button></form>
+        {% elif i.severity == "error" and can.override_error %}
+          <details class="reveal popover" data-focus data-menu>
+            <summary class="btn btn-sm">Override</summary>
+            <form class="pop-form" method="post" action="{% url 'review:resolve_issue' i.pk %}">{% csrf_token %}
+              <label class="lbl" for="note-{{ i.pk }}">What did you check? This is kept in the audit log.</label>
+              <textarea id="note-{{ i.pk }}" name="note" minlength="{{ override_min }}" maxlength="500" required placeholder="For example: confirmed with the supplier that the total includes a 2% handling fee."></textarea>
+              <div><button class="btn btn-primary btn-sm" type="submit">Override error</button></div>
+            </form>
+          </details>
+        {% elif i.severity == "error" %}
+          <span class="small muted">An approver can override after checking</span>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  {% if resolved_issues %}
+  <details class="chart-table" {% if not open_issues %}open{% endif %}>
+    <summary>{{ resolved_issues|length }} resolved</summary>
+    {% for i in resolved_issues %}
+    <div class="issue resolved">
+      <span class="sev tag ok">{% icon "check" %} {% if i.severity == "error" %}Overridden{% else %}Accepted{% endif %}</span>
+      <div><h4>{{ i.title }}</h4>
+        <p class="small">{{ i.resolved_by|display_name }}, {{ i.resolved_at|date:"j M Y, H:i" }}{% if i.resolution_note %}: “{{ i.resolution_note }}”{% endif %}</p></div>
+      <div></div>
+    </div>
+    {% endfor %}
+  </details>
+  {% endif %}
+</section>
+{% endif %}
+
+{% include "disputes/_shipment_panel.html" %}
+{% include "landed/_shared_panel.html" %}
+{% include "customs/_shipment_panel.html" %}
+
+{# ---------------------------------------------------------------- documents + viewer #}
+<div class="review-grid">
+  <div class="stack">
+    <div class="legend" aria-label="Field colour key">
+      <span><span class="conf ok"></span>Read with high confidence</span>
+      <span><span class="conf low"></span>Check against the PDF</span>
+      <span><span class="conf missing"></span>Missing</span>
+      <span><span class="conf human"></span>Entered by a person</span>
+    </div>
+
+    {% for item in docs %}{% with d=item.doc %}
+    <section class="card doc-card{% if forloop.first %} active{% endif %}" id="doc-{{ d.pk }}">
+      <div class="card-head">
+        <div class="doc-title">
+          <div style="min-width:0">
+            <h3>{{ d.get_doc_type_display }}</h3>
+            <div class="file" title="{{ d.original_filename }}">{{ d.original_filename }}</div>
+          </div>
+        </div>
+        <div class="actions">
+          <span class="badge plain neutral" title="{{ d.match.reason }}">{{ d.match.get_method_display }}{% if d.match.method == "fuzzy" %} ({{ d.match.score|floatformat:2 }}){% endif %}</span>
+          <a class="btn btn-sm" href="{% url 'review:document_file' d.pk %}" data-pdf-url="{% url 'review:document_file' d.pk %}" data-pdf-title="{{ d.original_filename }}">{% icon "eye" %} Show PDF</a>
+        </div>
+      </div>
+      <div class="card-body">
+        {% evidence_data d %}
+        {% include "mailboxes/_email_source.html" with doc=d compact=True %}
+        {% include "intake/_origin.html" %}
+        {% if item.open_issues %}<div class="tags" style="margin-bottom:8px">{% for i in item.open_issues %}<span class="tag {{ i.severity }}">{{ i.title }}</span>{% endfor %}</div>{% endif %}
+        {% include "learning/_doc_note.html" %}
+        <table class="fields">
+          {% for r in item.rows %}
+          <tr class="f-{{ r.field|conf_class }}" data-evidence-field="{{ r.name }}">
+            <td class="k"><span class="conf {{ r.field|conf_class }}" title="{% if r.field %}{% if r.field.source == 'human' %}Entered by a person{% else %}Confidence {% widthratio r.field.confidence 1 100 %}%{% endif %}{% else %}Missing{% endif %}"></span>{{ r.name|label }}</td>
+            <td>
+              {% if r.editable and can.edit and not shipment.is_locked %}
+              <form method="post" action="{% url 'review:update_field' d.pk %}">{% csrf_token %}
+                <input type="hidden" name="name" value="{{ r.name }}">
+                <label class="sr-only" for="f-{{ d.pk }}-{{ r.name }}">{{ r.name|label }}</label>
+                <input id="f-{{ d.pk }}-{{ r.name }}" type="text" name="value" value="{{ r.field.value|as_input }}" placeholder="Missing: type it from the PDF" data-autosubmit autocomplete="off">
+              </form>
+              {% else %}<span class="v">{{ r.field.value|show }}</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </table>
+        {% if item.line_items %}
+        <div class="table-wrap lines">
+          <table class="data">
+            <thead><tr><th>Line</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Amount</th></tr></thead>
+            <tbody>{% for li in item.line_items %}<tr data-evidence-line="{{ forloop.counter0 }}"><td>{{ li.description }}</td><td class="num">{{ li.quantity|default:"" }}</td><td class="num">{{ li.unit_price|default:"" }}</td><td class="num">{{ li.amount }}</td></tr>{% endfor %}</tbody>
+          </table>
+        </div>
+        {% endif %}
+        {% include "customs/_doc_tables.html" %}
+      </div>
+      {% if d.posts_to_accounting or can.edit and not shipment.is_locked %}
+      <div class="doc-foot">
+        {% if d.posts_to_accounting %}{% include "accounting/_doc_posting.html" %}{% endif %}
+        {% if can.edit and not shipment.is_locked %}
+        <form class="inline-form" method="post" action="{% url 'review:set_type' d.pk %}">{% csrf_token %}
+          <label class="lbl" for="type-{{ d.pk }}">Document type</label>
+          <select id="type-{{ d.pk }}" name="doc_type" data-autosubmit>
+            {% for key, name in doc_types %}<option value="{{ key }}"{% if key == d.doc_type %} selected{% endif %}>{{ name }}</option>{% endfor %}
+          </select>
+        </form>
+        <form class="inline-form" method="post" action="{% url 'review:move_document' d.pk %}">{% csrf_token %}
+          <label class="lbl" for="move-{{ d.pk }}">Wrong shipment?</label>
+          <select id="move-{{ d.pk }}" name="target">
+            <option value="new">Move to a new shipment</option>
+            {% for o in other_shipments %}<option value="{{ o.pk }}">{{ o.reference }}, B/L {{ o.bl_number|default:"none" }}</option>{% endfor %}
+          </select>
+          <button class="btn btn-sm" type="submit">Move</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endif %}
+    </section>
+    {% endwith %}{% empty %}
+    <section class="card"><div class="empty"><h3>No documents</h3><p class="muted">This shipment is empty.</p></div></section>
+    {% endfor %}
+
+    {% include "workflow/_comments.html" %}
+
+    <section class="card" id="activity">
+      <div class="card-head"><div><h2>Activity</h2><p>Who did what, newest first. The full record is in the audit log.</p></div></div>
+      {% if timeline %}
+      <ol class="timeline">
+        {% for e in timeline %}
+        <li class="{% if e.action == 'shipment.approved' or e.action == 'shipment.rejected' or e.action == 'bill.posted' %}key{% endif %}">
+          <div><strong>{{ e.who }}</strong> {{ e.text }}</div>
+          <div class="when" title="{{ e.at|date:'j M Y, H:i:s' }}">{{ e.at|date:"j M Y, H:i" }}</div>
+          {% if e.note %}<div class="note">{{ e.note }}</div>{% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+      {% else %}<div class="card-body muted">No activity yet.</div>{% endif %}
+    </section>
+  </div>
+
+  <aside class="viewer" aria-label="Source document">
+    {% with first=docs.0.doc %}
+    <div class="viewer-head">
+      <strong id="pdf-title">{{ first.original_filename|default:"No document" }}</strong>
+      {% if first %}<a id="pdf-open" class="btn btn-sm btn-quiet" href="{% url 'review:document_file' first.pk %}" target="_blank" rel="noopener">{% icon "external" %} Open</a>{% endif %}
+    </div>
+    <iframe id="pdf-frame" title="Source document" src="{% if first %}{% url 'review:document_file' first.pk %}{% endif %}"></iframe>
+    {% if first %}{% include "evidence/_viewer.html" %}{% endif %}
+    {% endwith %}
+  </aside>
+</div>
+{% include "landed/_landed_section.html" %}
+{% endblock %}
