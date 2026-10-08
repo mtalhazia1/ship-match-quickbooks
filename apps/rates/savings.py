@@ -58,6 +58,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
+from django.db.models import prefetch_related_objects
 from django.utils import timezone
 
 from apps.shipments.labels import issue_title
@@ -262,7 +263,9 @@ def summary(org, start: date, end: date, *, limit: int | None = 25) -> Savings:
     s = Savings(start=start, end=end, currency=org.home_currency)
     lo, hi = _bounds(start, end)
     catches = list(CaughtCharge.objects.filter(organization=org, first_caught_at__gte=lo, first_caught_at__lte=hi)
-                   .select_related("shipment", "document").order_by("-first_caught_at", "-id"))
+                   .order_by("-first_caught_at", "-id"))
+    statuses = dict(Shipment.objects.filter(pk__in={c.shipment_id for c in catches if c.shipment_id})
+                    .values_list("pk", "status"))      # one small query instead of a Shipment object per catch
     issues = {i.pk: i for i in ValidationIssue.objects.filter(pk__in=[c.issue_id for c in catches if c.issue_id])
               .select_related("resolved_by")}
     by_code: dict[str, Row] = {}
@@ -271,7 +274,7 @@ def summary(org, start: date, end: date, *, limit: int | None = 25) -> Savings:
     tz = timezone.get_current_timezone()
     rows: list[CatchRow] = []
     decided = [(c, *split_catch(c, issues.get(c.issue_id) if c.issue_id else None,
-                                c.shipment.status if c.shipment_id and c.shipment else None)) for c in catches]
+                                statuses.get(c.shipment_id) if c.shipment_id else None)) for c in catches]
     factors = _overlap_factors(decided)
     for c, outcome, split_native in decided:
         issue = issues.get(c.issue_id) if c.issue_id else None
@@ -315,6 +318,8 @@ def summary(org, start: date, end: date, *, limit: int | None = 25) -> Savings:
     s.by_vendor = sorted(by_vendor.values(), key=lambda r: (-r.caught, r.label))
     s.by_month = list(months.values())
     s.catches = rows if limit is None else rows[:limit]
+    # Documents are only shown for the rows on view, so load them for those rather than for every catch.
+    prefetch_related_objects([r.catch for r in s.catches], "document", "shipment")
     _add_recoveries(org, s)
     return s
 

@@ -585,3 +585,145 @@ def test_move_survives_the_target_vanishing_while_it_is_checked(client, approver
     monkeypatch.setattr("apps.shipments.views.validate_shipment", vanished)
     r = client.post(reverse("review:move_document", args=[doc.pk]), {"target": str(target.pk)}, follow=True)
     assert r.status_code == 200 and "moved by someone else at the same moment" in r.content.decode()
+
+
+# ---------------------------------------------------------------- QA-086: "My work" checks many shipments at once
+
+
+@pytest.mark.django_db
+def test_batched_approval_check_gives_the_same_answers(org, approver):
+    from decimal import Decimal
+
+    from apps.core.models import AuditEvent, Membership
+    from apps.disputes.models import Dispute
+    from apps.documents.models import ExtractedField
+    from apps.shipments.models import ValidationIssue
+    from apps.shipments.services.approval import approval_blockers, prefetch_approval
+
+    org.maker_checker = True
+    org.save()
+    Membership.objects.filter(user=approver, organization=org).update(approval_limit=Decimal("500.00"))
+    clean = Shipment.objects.create(organization=org, bl_number="A1", status=Shipment.Status.READY)
+    broken = Shipment.objects.create(organization=org, bl_number="A2", status=Shipment.Status.READY)
+    held = Shipment.objects.create(organization=org, bl_number="A3", status=Shipment.Status.READY)
+    prepared = Shipment.objects.create(organization=org, bl_number="A4", status=Shipment.Status.READY)
+    pricey = Shipment.objects.create(organization=org, bl_number="A5", status=Shipment.Status.READY)
+    ValidationIssue.objects.create(organization=org, shipment=broken, code="x", severity="error", message="m",
+                                   fingerprint="f1")
+    Dispute.objects.create(organization=org, shipment=held, vendor_name="V", vendor_key="v", status="sent",
+                           amount_disputed=Decimal("10.00"), currency="USD")
+    doc = _doc_in(org, prepared, 10)
+    AuditEvent.objects.create(organization=org, actor=approver, action="field.corrected", object_type="Document",
+                              object_id=str(doc.pk))
+    big = _doc_in(org, pricey, 11)
+    for name, value in (("total_amount", "9000.00"), ("currency", "USD")):
+        ExtractedField.objects.create(document=big, name=name, value=value, confidence=1)
+    big.doc_type = "freight_invoice"
+    big.save()
+
+    def load():
+        return {s.bl_number: s for s in Shipment.objects.filter(organization=org).select_related("organization")}
+
+    one_by_one = {bl: approval_blockers(s, approver) for bl, s in load().items()}
+    batched = load()
+    prefetch_approval(list(batched.values()))
+    answers = {bl: approval_blockers(s, approver) for bl, s in batched.items()}
+    assert answers == one_by_one
+    assert answers["A1"] == []
+    assert any("open error" in r for r in answers["A2"])
+    assert any("waiting for the vendor" in r for r in answers["A3"])
+    assert any("maker-checker" in r for r in answers["A4"])
+    assert any("approval limit" in r for r in answers["A5"])
+
+
+@pytest.mark.django_db
+def test_my_work_uses_a_constant_number_of_queries(client, approver, org, django_assert_max_num_queries):
+    for i in range(12):
+        Shipment.objects.create(organization=org, bl_number=f"MW{i}", status=Shipment.Status.READY)
+    client.force_login(approver)
+    client.get(reverse("workflow:my_work"))                       # warm caches
+    with django_assert_max_num_queries(45):                       # was about 7 queries per ready shipment
+        r = client.get(reverse("workflow:my_work"))
+    assert r.status_code == 200
+
+
+# ---------------------------------------------------------------- QA-088: the API lists documents without a query each
+
+
+@pytest.mark.django_db
+def test_api_documents_list_has_no_query_per_document(client, api_user, org):
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    shipment = Shipment.objects.create(organization=org, bl_number="API1")
+    for n in range(20, 24):
+        _doc_in(org, shipment, n)
+    client.get(f"/api/{org.slug}/documents?limit=2")                # warm: the first request loads session and org
+    with CaptureQueriesContext(connection) as few:
+        assert client.get(f"/api/{org.slug}/documents?limit=2").status_code == 200
+    for n in range(24, 34):
+        _doc_in(org, shipment, n)
+    with CaptureQueriesContext(connection) as many:
+        r = client.get(f"/api/{org.slug}/documents?limit=14")
+    assert len(r.json()) == 14 and len(many) == len(few)         # same number of queries for 2 and 14 documents
+
+
+# ---------------------------------------------------------------- QA-085: month-end lines are paged
+
+
+@pytest.mark.django_db
+def test_month_end_report_pages_its_lines(client, approver, org, monkeypatch):
+    from .test_close import invoice, shipment
+
+    monkeypatch.setattr("apps.close.views.LINES_PER_PAGE", 1)
+    s = shipment(org, ship="2026-08-01")
+    for n in range(3):
+        invoice(org, s, number=f"HA-{n}", day="2026-08-20", lines=(("Ocean Freight", "100.00"),))
+    client.force_login(approver)
+    first = client.get(reverse("close:accruals"), {"period": "2026-08-31", "live": "1"}).content.decode()
+    assert "Page 1 of" in first
+    assert "The CSV and Excel downloads above hold every line" in first
+    second = client.get(reverse("close:accruals"), {"period": "2026-08-31", "live": "1", "page": "2"})
+    assert second.status_code == 200 and "Page 2 of" in second.content.decode()
+    assert client.get(reverse("close:accruals_csv"), {"period": "2026-08-31"}).status_code == 200
+
+
+@pytest.mark.django_db
+def test_month_end_history_reads_values_without_field_objects(org):
+    from apps.documents.models import ExtractedField
+    from apps.close.services import history
+
+    s = Shipment.objects.create(organization=org, bl_number="H1")
+    doc = _doc_in(org, s, 40)
+    ExtractedField.objects.create(document=doc, name="vendor_name", value="Acme Freight", confidence=1)
+    ExtractedField.objects.create(document=doc, name="currency", value="USD", confidence=1)
+    fresh = type(doc).objects.get(pk=doc.pk)
+    history._preload_values([fresh])
+    assert fresh.data() == {"vendor_name": "Acme Freight", "currency": "USD"}
+    assert type(doc).objects.get(pk=doc.pk).data() == fresh.data()   # same answer without the shortcut
+
+
+# ---------------------------------------------------------------- small helpers that were made faster
+
+
+def test_parse_date_cache_keeps_the_same_answers():
+    from datetime import date
+
+    from apps.documents.services.normalize import parse_date
+
+    assert parse_date("2026-09-01") == date(2026, 9, 1) == parse_date(" 2026-09-01. ")
+    assert parse_date("1 Sep 2026") == date(2026, 9, 1)
+    assert parse_date("not a date") is None and parse_date(None) is None and parse_date("") is None
+    assert parse_date(date(2026, 1, 2)) == date(2026, 1, 2)
+
+
+def test_export_links_are_built_from_one_resolved_pattern(settings):
+    from django.urls import reverse
+
+    from apps.integrations.exports import _link
+
+    settings.SITE_URL = "https://app.example.test"
+    assert _link("review:shipment", 41) == "https://app.example.test" + reverse("review:shipment", args=[41])
+    settings.SITE_URL = "https://other.example.test"            # a changed setting is honoured
+    assert _link("review:document", 7).startswith("https://other.example.test/")
+    assert _link("review:document", 7) == "https://other.example.test" + reverse("review:document", args=[7])

@@ -19,7 +19,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from apps.accounting.models import vendor_key
-from apps.documents.models import Document
+from apps.documents.models import Document, ExtractedField
 from apps.documents.services.normalize import parse_date
 from apps.rates import charges, lanes
 from apps.rates.matching import ShipmentContext, context_for
@@ -124,9 +124,13 @@ class History:
     group_shipments_by_dest: dict[tuple[str, str], set[int]] = field(default_factory=lambda: defaultdict(set))
     all_shipments: set[int] = field(default_factory=set)
     group_shipments: dict[str, set[int]] = field(default_factory=lambda: defaultdict(set))
+    samples_by_group: dict[str, list[Sample]] = field(default_factory=lambda: defaultdict(list))
+    vendor_group_counts: dict[str, dict[str, int]] = field(default_factory=lambda: defaultdict(lambda: defaultdict(int)))
 
     def add(self, facts: ShipmentFacts, sample: Sample) -> None:
         self.samples.append(sample)
+        self.samples_by_group[sample.group].append(sample)           # indexes, so lookups don't rescan every sample
+        self.vendor_group_counts[sample.vendor_key][sample.group] += 1
         self.group_shipments_by_dest[(facts.destination_key, sample.group)].add(facts.shipment.pk)
         self.group_shipments[sample.group].add(facts.shipment.pk)
 
@@ -134,9 +138,7 @@ class History:
         """What each shipment cost for this group: per shipment and vendor (two invoices from one vendor for the
         same group count as one), or per shipment across vendors (per="shipment")."""
         combined: dict[tuple, Sample] = {}
-        for s in self.samples:
-            if s.group != group:
-                continue
+        for s in self.samples_by_group.get(group, ()):
             key = (s.shipment_id, s.vendor_key) if per == "vendor" else (s.shipment_id,)
             if key in combined:
                 c = combined[key]
@@ -183,10 +185,19 @@ class Book:
 
 
 def load(org) -> Book:
+    # The OCR text of a document is large and only bills of lading are read for it (below), and only the name and
+    # value of each field are used here: leave the rest out of this whole-organization read.
     docs = list(Document.objects.filter(organization=org)
                 .exclude(status__in=list(Document.CONTAINER_STATUSES))
-                .select_related("match__shipment", "posted_bill")
-                .prefetch_related("fields").order_by("received_at", "id"))
+                .select_related("match__shipment", "posted_bill").defer("text")
+                .order_by("received_at", "id"))
+    _preload_values(docs)
+    bl_ids = [d.pk for d in docs if d.doc_type == Document.DocType.BILL_OF_LADING]
+    if bl_ids:
+        texts = dict(Document.objects.filter(pk__in=bl_ids).values_list("pk", "text"))
+        for d in docs:
+            if d.pk in texts:
+                d.text = texts[d.pk]
     duplicates = set(ValidationIssue.objects.filter(organization=org, resolved=False, code__in=DUPLICATE_CODES,
                                                     document__isnull=False).values_list("document_id", flat=True))
     by_shipment: dict[int, list[Document]] = defaultdict(list)
@@ -260,11 +271,21 @@ def load(org) -> Book:
     return Book(org=org, facts=facts, history=history, documents=docs, duplicates=duplicates, rejected=rejected)
 
 
+def _preload_values(docs: list[Document]) -> None:
+    """Give each document its extracted values from one plain query (name and value only), instead of building a
+    field object for every value: a whole-organization read has tens of thousands of them."""
+    values: dict[int, dict] = {d.pk: {} for d in docs}
+    ids = list(values)
+    for start in range(0, len(ids), 5000):
+        for doc_id, name, value in (ExtractedField.objects.filter(document_id__in=ids[start:start + 5000])
+                                    .order_by("id").values_list("document_id", "name", "value")):
+            values[doc_id][name] = value
+    for d in docs:
+        d._preloaded_values = values[d.pk]
+
+
 def _usual_group(history: History, vk: str) -> str:
-    counts: dict[str, int] = defaultdict(int)
-    for s in history.samples:
-        if s.vendor_key == vk:
-            counts[s.group] += 1
+    counts = history.vendor_group_counts.get(vk)
     return max(counts, key=counts.get) if counts else groups.FREIGHT
 
 

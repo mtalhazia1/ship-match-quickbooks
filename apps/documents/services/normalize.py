@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+from functools import lru_cache
 
 # Order matters for ambiguous numeric dates: US style (month/day) is tried first.
 DATE_FORMATS = [
@@ -17,7 +18,12 @@ def parse_date(raw) -> date | None:
         return None
     if isinstance(raw, date):
         return raw
-    s = str(raw).strip().rstrip(".,")
+    return _parse_date_text(str(raw).strip().rstrip(".,"))
+
+
+@lru_cache(maxsize=8192)
+def _parse_date_text(s: str) -> date | None:
+    """Pure function of the text, and the same few thousand strings recur in a big report: parse each once."""
     for fmt in DATE_FORMATS:
         try:
             return datetime.strptime(s, fmt).date()

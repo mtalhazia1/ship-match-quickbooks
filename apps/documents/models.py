@@ -129,6 +129,9 @@ class Document(models.Model):
 
     def data(self) -> dict:
         """Extracted values as a plain dict: {field_name: value}."""
+        preloaded = self.__dict__.get("_preloaded_values")   # set by bulk readers (month-end) to skip field objects
+        if preloaded is not None:
+            return dict(preloaded)
         return {f.name: f.value for f in self.fields.all()}
 
     def field(self, name: str, default=None):

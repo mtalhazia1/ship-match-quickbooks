@@ -1,9 +1,11 @@
-# ShipMatch QA — prioritised summary of sessions 01–12
+# ShipMatch QA — prioritised summary of sessions 01–13
 
 Period: 3–4 Oct 2026. Method: exploratory testing in the in-app browser, issues listed only (nothing was fixed), against the local demo data plus the empty **Northwind Traders (test)** org for destructive tests. Detail, repro steps and evidence are in the per-session logs:
-[01 platform sweep](QA_SESSION_01.md) · [02 approval loop](QA_SESSION_02.md) · [03 disputes & month-end](QA_SESSION_03.md) · [04 intake & integrations](QA_SESSION_04.md) · [05 accounts & admin](QA_SESSION_05.md) · [06 cross-cutting](QA_SESSION_06.md) · [07 gap closing](QA_SESSION_07.md) · [08 webhooks, accounting, DEBUG off](QA_SESSION_08.md) · [09 static files, re-check, tenant sweep](QA_SESSION_09.md) · [10 concurrency](QA_SESSION_10.md) · [11 exports, reset, caching](QA_SESSION_11.md) · [12 PostgreSQL](QA_SESSION_12.md)
+[01 platform sweep](QA_SESSION_01.md) · [02 approval loop](QA_SESSION_02.md) · [03 disputes & month-end](QA_SESSION_03.md) · [04 intake & integrations](QA_SESSION_04.md) · [05 accounts & admin](QA_SESSION_05.md) · [06 cross-cutting](QA_SESSION_06.md) · [07 gap closing](QA_SESSION_07.md) · [08 webhooks, accounting, DEBUG off](QA_SESSION_08.md) · [09 static files, re-check, tenant sweep](QA_SESSION_09.md) · [10 concurrency](QA_SESSION_10.md) · [11 exports, reset, caching](QA_SESSION_11.md) · [12 PostgreSQL](QA_SESSION_12.md) · [13 scale](QA_SESSION_13.md)
 
 **Totals:** 73 numbered issues (QA-001 … QA-074; QA-047 was never used). 2 Critical/High-security, 5 High/Medium-high, 22 Medium, 36 Low, 8 "verify / decide". Session 07 added QA-065 … QA-074 and widened QA-002, QA-003, QA-010, QA-025. Several were re-explained or downgraded later; the table below uses the latest understanding.
+
+**Session 13 (8 Oct 2026, 3,000 synthetic shipments) found five speed issues; four are fixed on branch `fix/qa-session-13`, one was withdrawn:** QA-085 (month-end report 16 s and 6.3 MB: now 5.8 s and 143 KB, lines paged, build faster; its Excel journal is still slow without `lxml`), QA-086 (My work 9.4 s and 1,984 queries: now 0.6–0.9 s and 193 queries), QA-087 (landed-cost report: withdrawn, a one-time catch-up caused by the synthetic data), QA-088 (API documents list: 209 queries now 9; exports 3–4 s faster), QA-089 (dashboard and Savings about 30% faster). The paged lists (queue, documents, audit, disputes, rates, search) stay under half a second.
 
 **Session 12 (8 Oct 2026, first run on PostgreSQL) added two issues, both fixed the same day:** QA-083 (the dispute settings page crashed on a reply-to address over 254 characters: SQLite does not enforce column lengths, Postgres does) and QA-084 (moving a document into a shipment that another request was emptying gave a 500 and could delete a shipment just after a document landed in it). All migrations, the demo build and the test suite (1,063 passing, one timing-flaky test, now made deterministic) work on Postgres; the row-lock fixes from session 10 hold on real row locks.
 
@@ -21,6 +23,7 @@ Fixes are in commits `0aea335`, `0d04083` and `fdbe801` (earlier branch) and `fe
 
 - **Fixed:** QA-001, 002, 003, 004, 005, 006*, 007*, 008, 009, 010, 011, 012, 013, 014, 015, 017, 018, 024, 025, 026, 028, 029, 030, 032, 033, 034, 035, 036, 038, 039, 041, 042, 043, 044, 046, 048, 049, 051, 053, 054, 055, 058, 060, 061, 062, 064, 065, 066, 067, 068, 069, 071, 072, 074.
   (QA-006 and QA-007 were checked in the browser at 375 px and 1024 px on SHP-000041 and SHP-000044.)
+- **Sessions 08–13:** every issue found is fixed on its branch except QA-082 (cache headers on signed-in pages, verify), the Excel-journal speed (needs `lxml`) and the remaining export speed (a rewrite on plain queries).
 - **Session 08:** QA-075 and QA-076 fixed on branch `fix/qa-session-08`; QA-077 fixed too (the API docs page now uses the Swagger UI files bundled with django-ninja, under the normal Content-Security-Policy).
 - **Partly fixed:** QA-056 (totals are paged; about 5 queries per ready shipment remain).
 - **Not a defect on inspection:** QA-019 (different bytes, not duplicates), QA-037 and QA-052 (messages exist and render), QA-045, QA-070.

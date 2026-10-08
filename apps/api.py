@@ -106,7 +106,7 @@ class DocumentOut(Schema):
     @staticmethod
     def resolve_children(obj):
         """Documents made from this file: the files of a ZIP, or the parts of a split PDF."""
-        return list(obj.children.order_by("id").values_list("id", flat=True))
+        return sorted(c.pk for c in obj.children.all())   # list endpoints prefetch "children": no query per row
 
     @staticmethod
     def resolve_not_added(obj):

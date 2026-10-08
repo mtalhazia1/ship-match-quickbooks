@@ -82,6 +82,10 @@ def index(request):
     return redirect("close:accruals")
 
 
+LINES_PER_PAGE = 100
+LEFT_OUT_PER_PAGE = 50
+
+
 @login_required
 def accrual_report(request):
     org = current_org(request)
@@ -108,6 +112,8 @@ def accrual_report(request):
                                                                      and ln["confidence"] < 0.55)]
     else:
         show = "all"
+    page = Paginator(lines, LINES_PER_PAGE).get_page(request.GET.get("page"))   # a month can hold thousands of lines
+    left_page = Paginator(report.get("left_out") or [], LEFT_OUT_PER_PAGE).get_page(request.GET.get("left_page"))
     journal_rows, journal_total = exports.journal_lines(report)
     cfg = CloseSettings.for_org(org)
     month_ends = accruals.recent_month_ends(12)
@@ -119,7 +125,10 @@ def accrual_report(request):
         for g in groups.EXPECTABLE if used.get(f"expect_{g}", "never") != "never") or "nothing"
     return render(request, "close/accruals.html", {
         "period": period, "report": report, "expected_text": expected_text,
-        "reverse_on": period + timedelta(days=1), "lines": lines, "show": show, "versions": versions,
+        "reverse_on": period + timedelta(days=1), "lines": page.object_list, "page": page, "left_page": left_page, "show": show,
+        "versions": versions,
+        "pager_query": f"period={period.isoformat()}" + (f"&version={snapshot.version}" if snapshot else "&live=1")
+                       + f"&show={show}",
         "snapshot": snapshot, "live": live, "changes": changes, "journal_rows": journal_rows,
         "journal_total": journal_total, "cfg": cfg, "month_ends": month_ends,
         "custom_period": period not in month_ends, "attention": attention,

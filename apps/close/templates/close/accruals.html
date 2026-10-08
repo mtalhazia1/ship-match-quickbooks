@@ -173,19 +173,21 @@
       </tbody>
     </table>
   </div>
+  {% include "includes/pager.html" with query=pager_query %}
+  {% if page.has_other_pages %}<p class="hint">The CSV and Excel downloads above hold every line, not only this page.</p>{% endif %}
   {% else %}
   <div class="empty">{% icon "check" %}<h3>No lines here</h3><p class="muted">{% if show == "attention" %}Every line has an amount ShipMatch is reasonably sure of.{% else %}Nothing to accrue in this group for the period ending {{ period|date:"j M Y" }}.{% endif %}</p></div>
   {% endif %}
 </section>
 
 {% if report.left_out %}
-<section class="card close-left-out">
+<section class="card close-left-out" id="left-out">
   <div class="card-head"><div><h2>Not accrued</h2><p>Shipments and documents left out of the total, and why.</p></div><span class="num muted">{{ report.left_out|length }}</span></div>
   <div class="table-wrap">
     <table class="data compact">
       <thead><tr><th>Shipment or document</th><th>Why</th>{% if live and can_act %}<th><span class="sr-only">Undo</span></th>{% endif %}</tr></thead>
       <tbody>
-      {% for x in report.left_out %}
+      {% for x in left_page.object_list %}
         <tr><td class="nowrap">{% if x.shipment_id %}<a class="row-link" href="{% url 'review:shipment' x.shipment_id %}">{{ x.shipment_ref }}</a>{% endif %}
             {% if x.document_id %}<span class="sub"><a href="{% url 'review:document' x.document_id %}">{{ x.document_name }}</a></span>{% endif %}</td>
           <td><strong>{{ x.reason }}</strong>{% if x.detail %}<span class="sub">{{ x.detail }}</span>{% endif %}</td>
@@ -194,6 +196,16 @@
       </tbody>
     </table>
   </div>
+  {% if left_page.has_other_pages %}
+  <div class="pager">
+    <span class="num">{{ left_page.start_index }}–{{ left_page.end_index }} of {{ left_page.paginator.count }}</span>
+    <span class="actions">
+      {% if left_page.has_previous %}<a class="btn btn-sm" href="?{{ pager_query }}&amp;page={{ page.number }}&amp;left_page={{ left_page.previous_page_number }}#left-out">Previous</a>{% else %}<span class="btn btn-sm" aria-disabled="true">Previous</span>{% endif %}
+      <span>Page {{ left_page.number }} of {{ left_page.paginator.num_pages }}</span>
+      {% if left_page.has_next %}<a class="btn btn-sm" href="?{{ pager_query }}&amp;page={{ page.number }}&amp;left_page={{ left_page.next_page_number }}#left-out">Next</a>{% else %}<span class="btn btn-sm" aria-disabled="true">Next</span>{% endif %}
+    </span>
+  </div>
+  {% endif %}
 </section>
 {% endif %}
 

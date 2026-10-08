@@ -13,6 +13,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+from functools import lru_cache
 
 from django.conf import settings
 from django.db.models import Prefetch
@@ -136,8 +137,17 @@ def _money_text(amounts: dict[str, Decimal]) -> str:
     return "; ".join(f"{cur} {amount:,.2f}" for cur, amount in sorted(amounts.items()))
 
 
+_SENTINEL = 2147000001
+
+
+@lru_cache(maxsize=64)
+def _link_template(name: str, site_url: str) -> str:
+    return f"{site_url}{reverse(name, args=[_SENTINEL])}".replace(str(_SENTINEL), "{}")
+
+
 def _link(name: str, pk) -> str:
-    return f"{settings.SITE_URL}{reverse(name, args=[pk])}"
+    # The URL pattern is resolved once per export, not once per row (a 6,000-row export saves seconds).
+    return _link_template(name, settings.SITE_URL).format(pk)
 
 
 def _user(u) -> str:
@@ -207,7 +217,11 @@ def shipments_export(org, params) -> Export:
     header += ["Created", "Updated", "Link"]
     qs = (shipment_queryset(org, params).select_related("approved_by")
           .prefetch_related(Prefetch("links", queryset=MatchLink.objects.select_related("document")
-                                     .prefetch_related("document__fields")),
+                                     .prefetch_related(Prefetch(   # only the two values the totals need
+                                         "document__fields",
+                                         queryset=ExtractedField.objects.filter(name__in=("total_amount", "currency"))
+                                         .only("id", "document_id", "name", "value"))),
+                                     ),
                             Prefetch("issues", queryset=ValidationIssue.objects.filter(resolved=False)
                                      .order_by("id"), to_attr="open_issues"),
                             "posted_bills")
