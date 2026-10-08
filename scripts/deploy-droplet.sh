@@ -143,6 +143,7 @@ write_env() { # release dir
   set_env DJANGO_ALLOWED_HOSTS "$domain"
   set_env CELERY_TASK_ALWAYS_EAGER 0
   set_env TRUST_X_FORWARDED_FOR 1
+  set_env SITE_URL "https://$domain"
   set_env QBO_REDIRECT_URI "https://$domain/accounting/qbo/callback"
   if [[ "$created" -eq 1 ]]; then
     set_env S3_BUCKET ""            # uploaded files in the "media" Docker volume (set S3_* to use S3 instead)
