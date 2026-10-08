@@ -261,3 +261,14 @@ def test_nightly_reset_is_scheduled_only_in_demo_mode(monkeypatch):
     monkeypatch.setenv("DEMO_MODE", "0")
     off = importlib.reload(conf)
     assert "reset-demo-nightly" not in off.CELERY_BEAT_SCHEDULE
+
+
+@pytest.mark.django_db
+def test_seed_demo_makes_the_admin_a_superuser_only_when_asked():
+    """QA-020: a plain seed gives an org admin with no platform rights; --superuser adds them, also on a re-run."""
+    call_command("seed_demo", verbosity=0)
+    admin = get_user_model().objects.get(username="admin")
+    assert not admin.is_superuser and not admin.is_staff
+    call_command("seed_demo", "--superuser", verbosity=0)
+    admin.refresh_from_db()
+    assert admin.is_superuser and admin.is_staff
