@@ -34,6 +34,43 @@ def test_scanned_pdf_is_flagged_for_ocr(dataset):
     assert read_text((dataset / "pdf" / scanned["file"]).read_bytes()).needs_ocr
 
 
+def _pdf(pages: int, line: str, image: bytes | None = None) -> bytes:
+    import io
+
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas
+
+    out = io.BytesIO()
+    c = canvas.Canvas(out, pagesize=A4)
+    for _ in range(pages):
+        if image:
+            c.drawImage(ImageReader(io.BytesIO(image)), 0, 0, *A4)
+        c.drawString(72, 800, line)
+        c.showPage()
+    c.save()
+    return out.getvalue()
+
+
+def test_sparse_typed_pdf_is_read_from_its_text_layer():
+    """QA-073: a short line of real text per page is not a scan; OCR would find nothing more."""
+    tr = read_text(_pdf(40, "Packing slip continued"))
+    assert not tr.needs_ocr and tr.method == "text_layer" and tr.page_count == 40
+    assert tr.text.count("Packing slip continued") == 40
+
+
+def test_scanned_page_with_a_short_stamped_line_still_needs_ocr(dataset):
+    import io
+
+    import pdfplumber
+
+    scanned = next(d for d in _docs(dataset) if d["scanned"])
+    with pdfplumber.open(dataset / "pdf" / scanned["file"]) as pdf:
+        png = io.BytesIO()
+        pdf.pages[0].to_image(resolution=40).original.save(png, format="PNG")
+    assert read_text(_pdf(2, "Received 2026-10-01", image=png.getvalue())).needs_ocr
+
+
 def test_llm_value_not_in_text_gets_low_confidence(settings, monkeypatch):
     """Grounding: a value the document does not contain is treated as a possible hallucination."""
     settings.EXTRACTION_PROVIDER = "anthropic"
