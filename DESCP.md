@@ -1,9 +1,12 @@
 # ShipMatch — Portfolio Project Brief
 
 > **For agents writing proposals and job applications.** This file is the single source of truth about
-> ShipMatch. Read it instead of the codebase. Section 1 has ready-to-paste pitches, Section 12 maps job
-> types to the features worth highlighting, and Section 14 lists what must **not** be claimed.
-> Last verified against the code: 2026-10-03.
+> ShipMatch. Read it instead of the codebase. Section 1 has ready-to-paste pitches, Section 3 has two case
+> studies (the product build and the QA hardening pass), Section 12 maps job types to the features worth
+> highlighting, and Section 14 lists what must **not** be claimed.
+> Last verified against the code: 2026-10-08.
+>
+> **Source code (public):** https://github.com/mtalhazia1/ship-match-quickbooks
 
 ---
 
@@ -14,8 +17,8 @@
 | **What it is** | A multi-tenant B2B SaaS that automates **accounts payable for import shipments**. It reads messy shipping paperwork from email, groups each document into its shipment, catches overcharges and errors, routes them to human approval, and posts bills to **QuickBooks Online or Xero**. |
 | **Who it's for** | Importers, freight forwarders, customs brokers, logistics companies, and the bookkeeping/accounting firms that serve them. |
 | **Core idea** | AI is used **only to read documents**. Matching, validation and money math are deterministic, testable code. A human approves anything uncertain. |
-| **Size** | **~66,000 hand-written lines of code**: ~42,400 lines of application Python across 18 Django apps, ~12,900 lines of tests (**844 automated tests, all passing**), ~9,600 lines of templates/CSS/JS, ~800 lines of deploy/ops scripts. That excludes auto-generated migrations and vendored libraries. Also 213 URL routes, 154 templates and a 1,200-line operator README. This is the scale of a funded startup's product, not a weekend demo. |
-| **Benchmark** | On the bundled 68-document labelled benchmark: **100% field accuracy, 100% document grouping, 100% planted-error detection, 0 false alarms, $0.00 AI cost** (offline rule reader). Measured 2026-10-03. |
+| **Size** | **~68,000 hand-written lines of code**: ~43,200 lines of application Python across 18 Django apps, ~14,700 lines of tests (**1,054 automated tests, all passing**), ~9,700 lines of templates/CSS/JS, ~700 lines of deploy/ops scripts. That excludes auto-generated migrations and vendored libraries. Also ~200 app URL routes, 157 templates, a 1,200-line operator README and ~775 lines of QA reports. This is the scale of a funded startup's product, not a weekend demo. |
+| **Benchmark** | On the bundled 68-document labelled benchmark: **100% field accuracy, 100% document grouping, 100% planted-error detection, 0 false alarms, $0.00 AI cost** (offline rule reader). Re-measured 2026-10-08 on the current code. |
 | **Status** | Feature-complete, production-ready product: Docker deploy with automatic HTTPS, Stripe billing, self-serve signup, public demo mode, one-command server install with rollback and backups. |
 
 ---
@@ -45,8 +48,8 @@
 > rotating OAuth tokens and rate-limit handling. Around that core I built rate-card auditing with a savings
 > ledger, landed-cost allocation, US customs (CBP 7501) duty and fee checks, vendor dispute letters, month-end
 > accrual journals, vendor statement reconciliation, Stripe subscription billing, signed outgoing webhooks, a
-> REST API, Slack/Teams alerts, and 2FA. It is about 66,000 lines of hand-written code across 18 Django apps,
-> with 844 automated tests and a labelled accuracy benchmark.
+> REST API, Slack/Teams alerts, and 2FA. It is about 68,000 lines of hand-written code across 18 Django apps,
+> with 1,054 automated tests, a labelled accuracy benchmark, and a structured QA pass that fixed 54 issues.
 
 ---
 
@@ -69,7 +72,9 @@ caught, net annual benefit and payback period.
 
 ---
 
-## 3. Case study (use this structure in proposals)
+## 3. Case studies (use this structure in proposals)
+
+### 3a. Case study 1: building the product
 
 **Client profile (target persona):** a mid-size US importer or freight forwarder handling 200–4,000 shipping
 documents a month, with a 2–6 person AP team using QuickBooks Online or Xero.
@@ -112,12 +117,51 @@ documents a month, with a 2–6 person AP team using QuickBooks Online or Xero.
 - Shipment grouping: **100% pair precision and recall, 20/20 shipments exactly reconstructed**
 - Planted errors caught: **6/6 (100%)**, with **0 false alarms**
 - **65%** of shipments ready for approval with zero human touches
-- Processing: 68 documents in ~31 s on a laptop, **$0.00** AI cost with the offline reader
+- Processing: 68 documents in **under 5 s** on a laptop (Apple Silicon, 2026-10-08), **$0.00** AI cost with the offline reader
 - Scanned documents without OCR configured are correctly parked as "needs OCR" rather than guessed
 
 > When quoting results, say *"on a labelled synthetic benchmark"*. These are not production customer metrics
 > (see Section 14). The `run_eval` command reproduces them, and `pilot` / `accuracy_report` measure accuracy
 > on real documents from reviewer corrections.
+
+### 3b. Case study 2: production hardening through structured QA
+
+Use this one for QA, security, "take my MVP to production" and code-rescue jobs. It shows the build was
+tested like a real launch, not just demoed.
+
+**Challenge:** the product was feature-complete, but nobody had yet tried to break it the way real users,
+tired reviewers and hostile tenants do.
+
+**Approach**
+1. **Seven structured exploratory QA sessions** across the whole app: public pages and login, the approval loop,
+   disputes and month-end, intake and integrations, accounts and admin, cross-cutting checks (responsive layout at
+   375/768/1024 px, accessibility, performance, security headers), and gap-closing. Destructive tests ran against
+   a separate test organization.
+2. Every finding was logged with repro steps and evidence, then **triaged by severity** into one prioritised
+   summary: **73 numbered issues** (2 critical/security, 5 high, 22 medium, 36 low, 8 product decisions), a
+   suggested fix order, the root causes behind them, and a re-test checklist (`qa/QA_SUMMARY.md` and the session logs).
+3. Fixes were grouped by root cause ("validate at the boundary", "error pages built for developers", "tenant
+   boundary assumptions", "approval state vs UI wording"), so one fix closed many issues. Each fix has regression tests.
+
+**Results**
+- **54 issues fixed** and 5 more closed as not a defect, with **~1,700 lines of new regression tests**. The
+  remaining items are product decisions or deployment settings, and they are listed openly.
+- **Closed a cross-tenant account-takeover path:** an org admin could attach any existing account by email and
+  then issue it a password link or reset its 2FA. It became a consent-based, signed, 7-day invitation that only
+  works for the signed-in invitee. Responses no longer reveal whether an email has an account.
+- **Stopped one bad keystroke from taking down a company's dashboard:** typed values are now validated per field
+  type (money range, dates, currency, list limits), and computed money is clamped to what the database can store.
+- **No more tracebacks or server paths shown to users:** fake and password-protected PDFs are refused at upload
+  with instructions to fix them, failures show one plain-language sentence, and audit rows have server paths scrubbed.
+- **Race-safe duplicate uploads** (double-click, or email and upload at the same moment) instead of an HTTP 500.
+- **Month-end locks hardened:** a lock needs an exact period that has already ended, and a malformed request can
+  no longer lock the wrong month.
+- Branded "page expired" screen instead of Django's raw CSRF error, with the user returned to the page they were
+  on after an idle timeout. The OpenAPI docs page was fixed and is now guarded by a test. Accessibility fixes covered
+  contrast, focus handling, tap targets, headings and table headers.
+- The QA also recorded what was **already solid**: RBAC on every admin page and POST, tenant isolation (other
+  companies' IDs return 404), maker-checker, approval limits exact to the cent, idempotent QuickBooks posting,
+  CSP and security headers, and performance at 600+ shipments.
 
 ---
 
@@ -258,7 +302,7 @@ documents a month, with a 2–6 person AP team using QuickBooks Online or Xero.
   needs review, ready to approve, posting failed, reconnect needed, bill voided, dispute overdue, credit
   received, free-time alerts, plus a **daily digest** at each org's local hour.
 - Delivery after the transaction commits, retry with backoff, Retry-After honoured, stalled-delivery sweeper.
-- **Outgoing webhooks:** 15+ event types, Stripe-style HMAC-SHA256 signatures, secret rotation with overlap,
+- **Outgoing webhooks:** 14 event types, Stripe-style HMAC-SHA256 signatures, secret rotation with overlap,
   versioned envelopes, exponential retry up to 6 h, auto-disable after repeated failures, delivery log with replay,
   **SSRF protection with DNS-rebinding defence** (IP pinning).
 - **REST API** (Django Ninja, OpenAPI docs at `/api/docs`): scoped API keys (`shipments:read`, `documents:read`,
@@ -272,10 +316,29 @@ documents a month, with a 2–6 person AP team using QuickBooks Online or Xero.
 - **Stripe billing without the SDK:** Checkout, Customer Portal, verified webhooks (HMAC, multi-secret
   rotation, replay window, exactly-once events), subscription state machine robust to out-of-order events,
   **usage metering** with soft (100%) and hard (120%) limits. Plans: Starter $199 / Growth $499 / Scale $1,290 per month, 14-day trial.
+- **Team management:** invite by email with a role and an approval limit. New people get a signed set-password
+  link. People who already have an account get a **consent-based, signed, 7-day invitation** that only works while
+  they're signed in. Responses look the same either way, so nobody can probe which emails have accounts. Admins can
+  send password links or reset 2FA only for accounts that belong solely to their organization.
 - **Onboarding checklist** that ticks itself from real state (not from clicks).
 - **Public demo mode:** nightly reset, guard rails, nothing ever sent outside the server. **"Try it" page**:
   anonymous single-PDF sandbox with per-IP and global caps that bound AI cost, auto-deleted after 24 h.
 - Dashboard with documents per day, AP aging, savings, containers near their last free day. Accessible CSS charts with table fallbacks.
+
+### 4.13 Input validation and error handling (built for real, messy use)
+- **Reviewer edits validated by field type** before saving: money (range-checked, no NaN, infinity or exponents),
+  dates, currency codes, text and list length limits. A bad value shows a readable reason and saves nothing.
+- One shared **amount parser** for every typed amount (payments, adjustments, statement balances, approval limits),
+  plus clamping of computed money to what the database column can store and read back.
+- **PDFs checked when uploaded** (pypdf, then pdfplumber as fallback): damaged and password-protected files are
+  refused with steps to fix them. PDFs with only copy/print restrictions are still accepted.
+- **Plain-language failures:** users see one sentence (password-protected, damaged, or try again). Tracebacks and
+  server paths go to the log only, and older stored errors are shown the same friendly way.
+- **Race-safe intake:** identical uploads arriving at the same moment resolve to one document, for single files
+  and ZIPs.
+- Friendly error pages (403/404/500 and a branded "page expired" page for CSRF failures), safe return to the
+  original page after an idle sign-out, server-side length limits, validated API filters and paging, and time-zone
+  pickers that list canonical names (deprecated aliases hidden, saved values kept).
 
 ---
 
@@ -292,6 +355,11 @@ documents a month, with a 2–6 person AP team using QuickBooks Online or Xero.
 - CSV/Excel **formula-injection protection**. Zip-bomb and decompression limits. defusedxml.
 - Idempotency everywhere money moves (QuickBooks `requestid`, Xero `Idempotency-Key`, Stripe idempotency keys).
 - Fail-closed approval logic. Segregation of duties.
+- **Consent-based team invitations** (signed, expiring, bound to the signed-in invitee) and responses that don't
+  reveal which emails have accounts. Admin actions on accounts are limited to the admin's own organization.
+- **No internal details leak to users:** no tracebacks, server paths or environment-variable names in pages or
+  messages. Audit rows have server paths scrubbed.
+- Uploads are checked by content, and PDFs must actually open before they're accepted.
 
 ---
 
@@ -310,7 +378,7 @@ documents a month, with a 2–6 person AP team using QuickBooks Online or Xero.
 | Security | cryptography (Fernet), pyotp (TOTP), segno (QR), Django signing |
 | Storage | Local or **S3-compatible** (AWS S3, MinIO) via django-storages |
 | Infra / DevOps | **Docker**, Docker Compose (dev and prod overlays), **gunicorn**, **Caddy** (automatic HTTPS), WhiteNoise, **DigitalOcean** one-command deploy script (firewall, secrets, releases, **rollback**, nightly `pg_dump` backups with rotation) |
-| Quality | **pytest + pytest-django (844 tests)**, httpx.MockTransport fakes for every external API, **Ruff** linting, synthetic ground-truth dataset generator, accuracy evaluation harness |
+| Quality | **pytest + pytest-django (1,054 tests)**, httpx.MockTransport fakes for every external API, **Ruff** linting, synthetic ground-truth dataset generator, accuracy evaluation harness |
 | Observability | JSON structured logs, request IDs, `/health/` and `/health/ready/` probes |
 
 ---
@@ -345,7 +413,7 @@ hard imports. Background work is in Celery with retries. All money math uses `De
 
 ## 8. Engineering quality signals
 
-- **844 automated tests** across 41 files, **all green** (843 passed, 1 skipped, 0 failures; full run ≈ 9 min, verified 2026-10-03). Every external API (Stripe, QuickBooks, Xero, Microsoft Graph,
+- **1,054 automated tests** across 46 files, **all green** (1,054 passed, 0 skipped, 0 failures; full run ≈ 1 min 45 s on a laptop, verified 2026-10-08). Every external API (Stripe, QuickBooks, Xero, Microsoft Graph,
   LLMs) is faked with `httpx.MockTransport`. Tenant isolation, RBAC, security hardening and money math all have dedicated suites.
 - **Labelled evaluation harness** with a synthetic data generator. It produces fictional shipments in multiple
   layouts, scans, photos, ZIPs, batch PDFs, customs forms and vendor statements, with **planted errors**
@@ -356,7 +424,11 @@ hard imports. Background work is in Celery with retries. All money math uses `De
 - **Extensibility through registries** rather than coupling.
 - **Operational readiness:** health and readiness probes, JSON logs, one-command deploy, rollback,
   backups and restore, demo mode, ruff config.
-- **Accessibility:** keyboard navigation, ARIA live announcements, chart table fallbacks.
+- **Accessibility:** keyboard navigation, ARIA live announcements, chart table fallbacks, a skip link that moves
+  focus, alert roles for errors, AA-contrast muted text, 24 px minimum tap targets, and correct heading and table-header structure.
+- **Structured QA program:** 7 exploratory sessions, 73 triaged issues, 54 fixed with regression tests, and a
+  written re-test checklist (see case study 2). Findings and fix status live in the repo (`qa/`).
+- **Responsive approval pages** checked at 375 px, 768 px and 1024 px.
 
 ---
 
@@ -385,7 +457,9 @@ rate limiting · abuse prevention · audit logging · OWASP-minded input handlin
 **DevOps:** Docker · Docker Compose · Caddy / HTTPS · gunicorn · DigitalOcean · Bash deploy automation ·
 backups and rollback · health checks · structured logging.
 
-**Quality:** pytest · test doubles and mocking · synthetic data generation · evaluation metrics (precision, recall) · Ruff.
+**Quality:** pytest · test doubles and mocking · synthetic data generation · evaluation metrics (precision, recall) · Ruff ·
+exploratory QA · bug triage and severity prioritisation · regression testing · root-cause analysis · race-condition fixes ·
+input validation · accessibility auditing (WCAG-minded: contrast, focus, tap targets).
 
 **Frontend:** Django templates · vanilla JavaScript · PDF.js integration · accessible UI · responsive approval pages.
 
@@ -395,22 +469,23 @@ backups and rollback · health checks · structured logging.
 
 | Metric | Value |
 | --- | --- |
-| **Total hand-written code** | **~65,800 lines** (excludes auto-generated migrations and vendored PDF.js) |
-| Application Python (excluding migrations and tests) | ~42,400 lines |
-| Test code | ~12,900 lines, **844 tests**, 41 files (test-to-code ratio ≈ 0.3) |
-| Templates (HTML) | ~6,900 lines across 154 templates |
+| **Total hand-written code** | **~68,300 lines** (excludes auto-generated migrations and vendored PDF.js) |
+| Application Python (excluding migrations and tests) | ~43,200 lines |
+| Test code | ~14,700 lines, **1,054 tests**, 46 files (test-to-code ratio ≈ 0.34) |
+| Templates (HTML) | ~7,000 lines across 157 templates |
 | Frontend CSS + JS (own code) | ~1,300 + ~1,400 lines (custom design system, no framework) |
-| Deploy / ops (Dockerfile, Compose, Caddy, deploy and backup scripts) | ~800 lines |
-| Documentation | 1,200-line operator README plus this brief |
+| Deploy / ops (Dockerfile, Compose, Caddy, deploy and backup scripts) | ~700 lines, plus a DigitalOcean deploy guide |
+| Documentation | 1,200-line operator README, 7 QA session logs plus a prioritised QA summary, and this brief |
 | Django apps | 18 |
-| URL routes | 213 |
+| URL routes | ~200 (excluding Django admin) |
 | Document types understood | 6 business types (+ other/unknown) |
 | Input file formats | PDF, JPG, PNG, TIFF, WebP, XLSX, CSV, ZIP |
 | Email intake channels | 5 (forwarding via Postmark or Mailgun, Microsoft 365, IMAP, Gmail) |
 | Accounting systems | 2 (QuickBooks Online, Xero) |
 | Validation / check types | 38 distinct issue checks |
 | Scheduled background jobs | 10+ |
-| Outgoing webhook event types | 15+ |
+| Outgoing webhook event types | 14 |
+| QA issues logged / fixed | 73 / 54 (plus 5 closed as not a defect), each fix with regression tests |
 | Benchmark field accuracy / grouping / error recall | 100% / 100% / 100%, 0 false alarms (synthetic, rules reader) |
 | Benchmark straight-through rate | 65% of shipments need no human touch |
 | Supported LLMs | Claude Fable/Opus/Sonnet/Haiku, OpenAI GPT-4o-mini (configurable) |
@@ -435,7 +510,7 @@ backups and rollback · health checks · structured logging.
 | Job / project type | Lead with | Also mention |
 | --- | --- | --- |
 | **AI / LLM engineer, document AI, IDP, OCR** | Grounded extraction, structured outputs, rules fallback, evaluation harness with precision/recall, vendor learning, cost tracking, multi-provider | Evidence highlighting, batch PDF splitting, Textract |
-| **Django / Python backend** | 18-app modular monolith, Django Ninja API, Celery jobs, multi-tenancy, RBAC, 844 tests | Idempotency, row locks, registries/plugins |
+| **Django / Python backend** | 18-app modular monolith, Django Ninja API, Celery jobs, multi-tenancy, RBAC, 1,054 tests | Idempotency, row locks, registries/plugins |
 | **SaaS MVP / full product build** | Signup → trial → Stripe billing → usage limits → onboarding → demo mode → deploy script | Webhooks, API keys, alerts, firm view |
 | **FinTech / accounting automation / AP** | QuickBooks + Xero posting, payment sync, AP aging, maker-checker, approval limits, audit log, month-end accruals, statement reconciliation | Disputes, savings ledger, multi-currency |
 | **QuickBooks / Xero integration** | OAuth (incl. PKCE), idempotent bills/credits, attachments, rate limits, token rotation under row locks, payment read-back | Error translation, provider abstraction |
@@ -447,6 +522,8 @@ backups and rollback · health checks · structured logging.
 | **DevOps / deployment** | Docker Compose dev/prod overlays, Caddy HTTPS, one-command droplet deploy with rollback, backups and restore | Health probes, JSON logs |
 | **Workflow / internal tools** | Review queue, bulk actions with preview, assignment rules, comments/@mentions, keyboard shortcuts, approve-from-Slack links | Notifications, exports |
 | **Data / reporting** | Streaming CSV/Excel exports, savings ledger, landed cost by product, accruals journal, accuracy reports | Dashboard charts |
+| **QA / testing / bug fixing** | Case study 2: 7 QA sessions, 73 triaged issues, 54 fixed with regression tests, root-cause grouping | Large automated test suite, mocked external APIs, accuracy benchmark |
+| **MVP rescue / production readiness** | Case study 2 plus the security list: tenant-boundary fix, input validation, no leaked errors, race-safe intake | Deploy with rollback, backups, health probes |
 
 ---
 
@@ -467,9 +544,15 @@ backups and rollback · health checks · structured logging.
 > accuracy, grouping precision/recall and AI cost are measured on every change. On that benchmark the system
 > scores 100% field accuracy and catches every planted error with zero false alarms.
 
+**Tested like a launch, not a demo**
+> Before calling ShipMatch done, I ran seven structured QA sessions against it, logged 73 issues with repro steps,
+> triaged them by severity and fixed them by root cause, with a regression test for each. That pass closed a
+> cross-tenant account-takeover path, stopped a single bad input from crashing dashboards, and made duplicate
+> uploads race-safe. I'd bring the same discipline to your product.
+
 **Production-minded**
 > ShipMatch ships with 2FA, encryption at rest, a strict CSP, an immutable audit log, SSRF-safe webhooks,
-> Stripe billing, a public demo mode, and a one-command deploy with rollback and nightly backups. It's covered by 844 automated tests.
+> Stripe billing, a public demo mode, and a one-command deploy with rollback and nightly backups. It's covered by 1,054 automated tests.
 
 ---
 
@@ -486,3 +569,9 @@ backups and rollback · health checks · structured logging.
 - Customs logic is **US-centric** (CBP 7501, MPF/HMF). Other countries' declarations are read but only generic checks apply.
 - Old `.xls`, HEIC, Word and RAR files are not supported (users are asked to convert).
 - Celery workers don't run natively on Windows (Docker or inline mode is used there).
+- **QA results:** the 73 issues were found in this product, by its own QA pass. Say "hardened through structured
+  QA", not "zero bugs". A few items are still open and documented: pdf.js loads eagerly on the shipment page,
+  `/my-work/` still runs about 5 queries per ready shipment, static-file caching on the dev server, and nine
+  product decisions. QA ran in Chromium only. Other browsers and real screen readers weren't tested.
+- The Xero connection flow and real Microsoft 365, Gmail and IMAP mailboxes are covered by mocked tests, not by
+  manual QA against live accounts. QuickBooks posting and payment read-back *were* exercised against the Intuit sandbox.
