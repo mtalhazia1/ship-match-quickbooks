@@ -709,3 +709,47 @@ def test_my_work_works_out_totals_only_for_the_rows_on_the_page(client, org, app
     second = client.get(reverse("workflow:my_work"), {"page": 2})
     assert second.status_code == 200 and len(calls) == 15
     assert all(row.totals is not None for row in second.context["page"].object_list)
+
+
+@pytest.mark.django_db
+def test_my_work_checks_approval_rules_in_bulk(client, org, approver):
+    """The approval checks for ready shipments cost a fixed number of queries, not a few per shipment."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    from apps.shipments.models import Shipment
+    from apps.workflow.views import PER_PAGE
+
+    client.force_login(approver)
+    client.get(reverse("workflow:my_work"))  # first request of a session does extra bookkeeping
+
+    def queries(n):
+        Shipment.objects.filter(organization=org).delete()
+        for i in range(n):
+            Shipment.objects.create(organization=org, bl_number=f"BK{i}", status=Shipment.Status.READY)
+        with CaptureQueriesContext(connection) as ctx:
+            assert client.get(reverse("workflow:my_work")).status_code == 200
+        return len(ctx.captured_queries)
+
+    assert queries(PER_PAGE + 30) == queries(PER_PAGE)
+
+
+@pytest.mark.django_db
+def test_bulk_approval_checks_match_the_per_shipment_ones(org, approver, user):
+    """prefetch_approval must not change the answer: open errors, maker-checker and dispute holds still block."""
+    from apps.disputes.models import Dispute
+    from apps.shipments.services.approval import approval_blockers, prefetch_approval
+
+    clean, errored, prepared, held = _ready(org, 4)
+    ValidationIssue.objects.create(organization=org, shipment=errored, code="x", severity="error", message="x",
+                                   fingerprint="e")
+    issue = ValidationIssue.objects.create(organization=org, shipment=prepared, code="y", severity="warning",
+                                           message="y", fingerprint="p", resolved=True)
+    audit(org, "issue.resolved", issue, actor=approver)
+    Dispute.objects.create(organization=org, shipment=held, status=Dispute.Status.SENT, vendor_name="V",
+                           amount_disputed=10, currency="USD")
+    expected = {s.pk: approval_blockers(Shipment.objects.get(pk=s.pk), approver) for s in (clean, errored, prepared, held)}
+    fresh = list(Shipment.objects.filter(pk__in=expected).select_related("organization"))
+    prefetch_approval(fresh)
+    assert {s.pk: approval_blockers(s, approver) for s in fresh} == expected
+    assert expected[clean.pk] == [] and all(expected[s.pk] for s in (errored, prepared, held))

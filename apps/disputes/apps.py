@@ -23,7 +23,7 @@ class DisputesConfig(AppConfig):
             if group not in views.AUDIT_ACTION_GROUPS:
                 views.AUDIT_ACTION_GROUPS.append(group)
         context_processors.SECTIONS.setdefault("disputes:settings", "settings")
-        register_approval_blocker(workflow.approval_blockers)
+        register_approval_blocker(workflow.approval_blockers, prefetch=workflow.prefetch_approval)
 
         def _relink(sender, instance, created, **kwargs):
             if created:

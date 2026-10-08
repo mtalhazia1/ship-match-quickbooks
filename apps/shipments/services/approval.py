@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 
+from django.db.models import Count
+
 from apps.core.models import AuditEvent
 from apps.core.permissions import has_perm, membership_for
 from apps.documents.models import Document
@@ -19,11 +21,33 @@ MAKER_ACTIONS = {"field.corrected", "document.moved", "document.received", "docu
 # Other apps add approval rules without editing this file: call register_approval_blocker(fn) from their
 # AppConfig.ready(). fn(shipment, user) returns a list of reasons (empty = no objection).
 APPROVAL_BLOCKERS = []
+# Optional companions: prefetch(shipments) loads in bulk what a blocker would query per shipment, for pages that
+# check many shipments at once (My work). It stores the result on the instances; the blocker reads it if present.
+APPROVAL_PREFETCHERS = []
 
 
-def register_approval_blocker(fn) -> None:
+def register_approval_blocker(fn, prefetch=None) -> None:
     if fn not in APPROVAL_BLOCKERS:
         APPROVAL_BLOCKERS.append(fn)
+    if prefetch is not None and prefetch not in APPROVAL_PREFETCHERS:
+        APPROVAL_PREFETCHERS.append(prefetch)
+
+
+def prefetch_approval(shipments) -> None:
+    """Load in a fixed number of queries what approval_blockers would otherwise query for each shipment."""
+    shipments = list(shipments)
+    if not shipments:
+        return
+    ids = [s.pk for s in shipments]
+    errors = dict(ValidationIssue.objects.filter(shipment_id__in=ids, resolved=False,
+                                                 severity=ValidationIssue.Severity.ERROR)
+                  .values("shipment_id").annotate(n=Count("id")).values_list("shipment_id", "n"))
+    by_shipment = _makers_by_shipment(ids)
+    for s in shipments:
+        s._open_errors = errors.get(s.pk, 0)
+        s._makers = by_shipment.get(s.pk, set())
+    for prefetch in APPROVAL_PREFETCHERS:
+        prefetch(shipments)
 
 
 # Reasons an approved shipment's bills must not be posted yet (e.g. an invoice shared with shipments that
@@ -81,6 +105,9 @@ def shipment_totals(shipment: Shipment) -> Totals:
 
 def makers(shipment: Shipment) -> set[int]:
     """User IDs who prepared this shipment (uploaded, edited, moved documents or accepted issues)."""
+    cached = getattr(shipment, "_makers", None)
+    if cached is not None:
+        return cached
     doc_ids = [str(pk) for pk in Document.objects.filter(match__shipment=shipment).values_list("pk", flat=True)]
     issue_ids = [str(pk) for pk in ValidationIssue.objects.filter(shipment=shipment).values_list("pk", flat=True)]
     events = AuditEvent.objects.filter(action__in=MAKER_ACTIONS, actor__isnull=False).filter(
@@ -101,7 +128,9 @@ def approval_blockers(shipment: Shipment, user) -> list[str]:
         return ["This shipment is already approved."]
     if shipment.status == Shipment.Status.REJECTED:
         reasons.append("This shipment was rejected. Reopen it first.")
-    errors = shipment.issues.filter(resolved=False, severity=ValidationIssue.Severity.ERROR).count()
+    errors = getattr(shipment, "_open_errors", None)
+    if errors is None:
+        errors = shipment.issues.filter(resolved=False, severity=ValidationIssue.Severity.ERROR).count()
     if errors:
         reasons.append(f"Resolve {errors} open error{'s' if errors != 1 else ''} first.")
     for blocker in APPROVAL_BLOCKERS:
@@ -122,3 +151,20 @@ def approval_blockers(shipment: Shipment, user) -> list[str]:
             reasons.append(f"Shipment total {org.home_currency} {totals.home:,.2f} is above your approval limit "
                            f"of {org.home_currency} {limit:,.2f}.")
     return reasons
+
+
+def _makers_by_shipment(shipment_ids: list[int]) -> dict[int, set[int]]:
+    """makers() for many shipments in three queries."""
+    docs = {str(pk): sid for pk, sid in Document.objects.filter(match__shipment_id__in=shipment_ids)
+            .values_list("pk", "match__shipment_id")}
+    issues = {str(pk): sid for pk, sid in ValidationIssue.objects.filter(shipment_id__in=shipment_ids)
+              .values_list("pk", "shipment_id")}
+    out: dict[int, set[int]] = {}
+    events = AuditEvent.objects.filter(action__in=MAKER_ACTIONS, actor__isnull=False)
+    for object_type, owners in (("Document", docs), ("ValidationIssue", issues)):
+        if not owners:
+            continue
+        for object_id, actor_id in (events.filter(object_type=object_type, object_id__in=list(owners))
+                                    .values_list("object_id", "actor_id")):
+            out.setdefault(owners[object_id], set()).add(actor_id)
+    return out

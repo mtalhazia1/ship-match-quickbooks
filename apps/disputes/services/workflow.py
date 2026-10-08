@@ -481,11 +481,23 @@ def resolve_linked_issues(dispute: Dispute, user, note: str) -> int:
 def approval_blockers(shipment: Shipment, user) -> list[str]:
     """Registered with the approval rules: a dispute waiting for the vendor holds the shipment."""
     reasons = []
-    for d in Dispute.objects.filter(shipment=shipment, status__in=Dispute.WAITING, hold_released=False):
+    waiting = getattr(shipment, "_waiting_disputes", None)
+    if waiting is None:
+        waiting = Dispute.objects.filter(shipment=shipment, status__in=Dispute.WAITING, hold_released=False)
+    for d in waiting:
         reasons.append(f"{d.reference} with {d.vendor_name} is waiting for the vendor "
                        f"({money(d.amount_disputed, d.currency)} disputed). Record the credit note or corrected "
                        "invoice on the dispute, or an approver can approve without waiting.")
     return reasons
+
+
+def prefetch_approval(shipments) -> None:
+    """approval_blockers' disputes for many shipments in one query."""
+    by_shipment: dict[int, list[Dispute]] = {}
+    for d in Dispute.objects.filter(shipment__in=shipments, status__in=Dispute.WAITING, hold_released=False):
+        by_shipment.setdefault(d.shipment_id, []).append(d)
+    for s in shipments:
+        s._waiting_disputes = by_shipment.get(s.pk, [])
 
 
 def relink_issue(issue: ValidationIssue) -> None:
