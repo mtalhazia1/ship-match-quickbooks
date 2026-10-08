@@ -18,8 +18,8 @@ from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_POST
 
-from apps.core.context import client_ip_var
 from apps.core import timezones
+from apps.core.context import client_ip_var
 from apps.core.models import Organization
 from apps.core.utils import audit
 

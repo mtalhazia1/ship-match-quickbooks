@@ -16,7 +16,6 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from apps.core.paging import Paginator
 from django.db.models import Count, Q
 from django.forms import inlineformset_factory
 from django.http import HttpResponse
@@ -27,6 +26,7 @@ from django.views.decorators.http import require_POST
 
 from apps.accounting.models import vendor_key
 from apps.core.models import AuditEvent
+from apps.core.paging import Paginator
 from apps.core.permissions import has_perm, require
 from apps.core.utils import audit, current_org
 from apps.documents.models import Document, ExtractedField
