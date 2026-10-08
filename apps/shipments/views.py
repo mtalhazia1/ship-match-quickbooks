@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.db.models import Count, Q
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -481,22 +482,30 @@ def resolve_issue(request, pk):
 # ---------------------------------------------------------------- decisions
 
 
+def _lock(shipment: Shipment) -> Shipment:
+    """The shipment re-read with its row locked until the surrounding transaction ends."""
+    return Shipment.objects.select_for_update().select_related("organization").get(pk=shipment.pk)
+
+
 @login_required
 @require_POST
 def approve(request, pk):
     shipment = _shipment_for(request, pk, "approve")
-    blockers = approval_blockers(shipment, request.user)
-    if blockers:
-        messages.error(request, "Not approved. " + " ".join(blockers))
-        return redirect("review:shipment", pk=pk)
-    totals = shipment_totals(shipment)
-    Approval.objects.create(shipment=shipment, user=request.user, decision=Approval.Decision.APPROVE,
-                            note=request.POST.get("note", "").strip()[:500])
-    shipment.status, shipment.approved_by, shipment.approved_at = Shipment.Status.APPROVED, request.user, timezone.now()
-    shipment.save()
-    audit(shipment.organization, "shipment.approved", shipment, actor=request.user,
-          note=request.POST.get("note", "").strip()[:500], total_home=totals.home,
-          totals={k: str(v) for k, v in totals.by_currency.items()})
+    with transaction.atomic():
+        shipment = _lock(shipment)   # check and write under one lock: two simultaneous requests can't both pass
+        blockers = approval_blockers(shipment, request.user)
+        if blockers:
+            messages.error(request, "Not approved. " + " ".join(blockers))
+            return redirect("review:shipment", pk=pk)
+        totals = shipment_totals(shipment)
+        Approval.objects.create(shipment=shipment, user=request.user, decision=Approval.Decision.APPROVE,
+                                note=request.POST.get("note", "").strip()[:500])
+        shipment.status, shipment.approved_by, shipment.approved_at = (Shipment.Status.APPROVED, request.user,
+                                                                       timezone.now())
+        shipment.save()
+        audit(shipment.organization, "shipment.approved", shipment, actor=request.user,
+              note=request.POST.get("note", "").strip()[:500], total_home=totals.home,
+              totals={k: str(v) for k, v in totals.by_currency.items()})
     connected = active_connection(shipment.organization)
     messages.success(request, f"{shipment.reference} approved."
                      + (f" Post the bills to {connected.system_name} when you're ready." if connected else ""))
@@ -507,17 +516,20 @@ def approve(request, pk):
 @require_POST
 def reject(request, pk):
     shipment = _shipment_for(request, pk, "approve")
-    if shipment.is_locked:
-        messages.error(request, f"{shipment.reference} is already {shipment.get_status_display().lower()}. Reopen it first.")
-        return redirect("review:shipment", pk=pk)
     note = request.POST.get("note", "").strip()[:500]
-    if len(note) < REJECT_NOTE_MIN:
-        messages.error(request, "Give a reason for rejecting, so the team knows what to fix.")
-        return redirect("review:shipment", pk=pk)
-    Approval.objects.create(shipment=shipment, user=request.user, decision=Approval.Decision.REJECT, note=note)
-    shipment.status = Shipment.Status.REJECTED
-    shipment.save(update_fields=["status", "updated_at"])
-    audit(shipment.organization, "shipment.rejected", shipment, actor=request.user, note=note)
+    with transaction.atomic():
+        shipment = _lock(shipment)
+        if shipment.is_locked:
+            messages.error(request, f"{shipment.reference} is already {shipment.get_status_display().lower()}. "
+                                    "Reopen it first.")
+            return redirect("review:shipment", pk=pk)
+        if len(note) < REJECT_NOTE_MIN:
+            messages.error(request, "Give a reason for rejecting, so the team knows what to fix.")
+            return redirect("review:shipment", pk=pk)
+        Approval.objects.create(shipment=shipment, user=request.user, decision=Approval.Decision.REJECT, note=note)
+        shipment.status = Shipment.Status.REJECTED
+        shipment.save(update_fields=["status", "updated_at"])
+        audit(shipment.organization, "shipment.rejected", shipment, actor=request.user, note=note)
     messages.info(request, f"{shipment.reference} rejected.")
     return redirect("review:shipment", pk=pk)
 
@@ -526,11 +538,13 @@ def reject(request, pk):
 @require_POST
 def reopen(request, pk):
     shipment = _shipment_for(request, pk, "approve")
-    if shipment.status == Shipment.Status.POSTED:
-        messages.error(request, "Posted shipments can't be reopened. Void the bills in your accounting system first.")
-        return redirect("review:shipment", pk=pk)
-    shipment.status, shipment.approved_by, shipment.approved_at = Shipment.Status.OPEN, None, None
-    shipment.save(update_fields=["status", "approved_by", "approved_at", "updated_at"])
+    with transaction.atomic():
+        shipment = _lock(shipment)
+        if shipment.status == Shipment.Status.POSTED:
+            messages.error(request, "Posted shipments can't be reopened. Void the bills in your accounting system first.")
+            return redirect("review:shipment", pk=pk)
+        shipment.status, shipment.approved_by, shipment.approved_at = Shipment.Status.OPEN, None, None
+        shipment.save(update_fields=["status", "approved_by", "approved_at", "updated_at"])
     validate_shipment(shipment)
     audit(shipment.organization, "shipment.reopened", shipment, actor=request.user)
     messages.success(request, f"{shipment.reference} reopened for changes.")

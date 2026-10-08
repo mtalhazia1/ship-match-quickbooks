@@ -433,3 +433,69 @@ def test_api_reference_uses_local_files_and_the_app_policy(client, api_user, org
     assert "/static/ninja/swagger-ui-bundle.js" in page and "/static/ninja/swagger-ui.css" in page
     assert "cdn.jsdelivr.net" not in page and "django-ninja.dev" not in page
     assert "script-src 'self'" in r["Content-Security-Policy"]
+
+
+# ---------------------------------------------------------------- QA-079: SQLite waits for the write lock
+
+
+def test_sqlite_write_transactions_start_up_front_and_wait():
+    from django.conf import settings
+
+    db = settings.DATABASES["default"]
+    if not db["ENGINE"].endswith("sqlite3"):
+        pytest.skip("only the SQLite setup needs this")
+    assert db["OPTIONS"]["transaction_mode"] == "IMMEDIATE" and db["OPTIONS"]["timeout"] >= 10
+
+
+# ---------------------------------------------------------------- QA-080 / QA-081: decisions are checked under a lock
+
+
+def _stale_view(monkeypatch, shipment):
+    """Make the view start from the copy it read before another request changed the row."""
+    stale = Shipment.objects.get(pk=shipment.pk)
+    monkeypatch.setattr("apps.shipments.views._shipment_for", lambda request, pk, perm=None: stale)
+
+
+@pytest.mark.django_db
+def test_second_approval_that_read_the_old_status_is_refused(client, approver, org, monkeypatch):
+    from apps.shipments.models import Approval
+
+    s = Shipment.objects.create(organization=org, bl_number="RACE1", status=Shipment.Status.READY)
+    _stale_view(monkeypatch, s)                                  # this request saw "ready"
+    Shipment.objects.filter(pk=s.pk).update(status=Shipment.Status.APPROVED)   # the other request got there first
+    client.force_login(approver)
+    text = client.post(reverse("review:approve", args=[s.pk]), follow=True).content.decode()
+    assert "already approved" in text
+    assert Approval.objects.filter(shipment=s).count() == 0
+
+
+@pytest.mark.django_db
+def test_reject_that_read_the_old_status_does_not_overwrite_an_approval(client, approver, org, monkeypatch):
+    from apps.shipments.models import Approval
+
+    s = Shipment.objects.create(organization=org, bl_number="RACE2", status=Shipment.Status.READY)
+    _stale_view(monkeypatch, s)
+    Shipment.objects.filter(pk=s.pk).update(status=Shipment.Status.APPROVED)
+    client.force_login(approver)
+    text = client.post(reverse("review:reject", args=[s.pk]), {"note": "needs a different invoice"},
+                       follow=True).content.decode()
+    assert "already approved" in text
+    s.refresh_from_db()
+    assert s.status == Shipment.Status.APPROVED and Approval.objects.filter(shipment=s).count() == 0
+
+
+@pytest.mark.django_db
+def test_normal_approve_reject_and_reopen_still_work(client, approver, org):
+    from apps.shipments.models import Approval
+
+    a = Shipment.objects.create(organization=org, bl_number="OK1", status=Shipment.Status.READY)
+    b = Shipment.objects.create(organization=org, bl_number="OK2", status=Shipment.Status.READY)
+    client.force_login(approver)
+    client.post(reverse("review:approve", args=[a.pk]))
+    client.post(reverse("review:reject", args=[b.pk]), {"note": "wrong vendor on the invoice"})
+    a.refresh_from_db(), b.refresh_from_db()
+    assert (a.status, b.status) == (Shipment.Status.APPROVED, Shipment.Status.REJECTED)
+    assert Approval.objects.filter(shipment=a).count() == 1 and Approval.objects.filter(shipment=b).count() == 1
+    client.post(reverse("review:reopen", args=[a.pk]))
+    a.refresh_from_db()
+    assert a.status != Shipment.Status.APPROVED

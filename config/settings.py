@@ -110,6 +110,10 @@ DATABASES = {
         conn_max_age=60,
     )
 }
+if DATABASES["default"]["ENGINE"].endswith("sqlite3"):
+    # SQLite allows one writer. Start write transactions up front and wait for the lock, so two people (or a
+    # double-click) queue instead of one getting "database is locked" (HTTP 500).
+    DATABASES["default"].setdefault("OPTIONS", {}).update({"transaction_mode": "IMMEDIATE", "timeout": 20})
 
 # Shared cache for login lockout, 2FA replay protection and API rate limits.
 # Use Redis in production so every web worker sees the same counters.

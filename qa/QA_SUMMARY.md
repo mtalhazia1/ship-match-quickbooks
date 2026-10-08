@@ -1,9 +1,11 @@
-# ShipMatch QA — prioritised summary of sessions 01–09
+# ShipMatch QA — prioritised summary of sessions 01–10
 
 Period: 3–4 Oct 2026. Method: exploratory testing in the in-app browser, issues listed only (nothing was fixed), against the local demo data plus the empty **Northwind Traders (test)** org for destructive tests. Detail, repro steps and evidence are in the per-session logs:
-[01 platform sweep](QA_SESSION_01.md) · [02 approval loop](QA_SESSION_02.md) · [03 disputes & month-end](QA_SESSION_03.md) · [04 intake & integrations](QA_SESSION_04.md) · [05 accounts & admin](QA_SESSION_05.md) · [06 cross-cutting](QA_SESSION_06.md) · [07 gap closing](QA_SESSION_07.md) · [08 webhooks, accounting, DEBUG off](QA_SESSION_08.md) · [09 static files, re-check, tenant sweep](QA_SESSION_09.md)
+[01 platform sweep](QA_SESSION_01.md) · [02 approval loop](QA_SESSION_02.md) · [03 disputes & month-end](QA_SESSION_03.md) · [04 intake & integrations](QA_SESSION_04.md) · [05 accounts & admin](QA_SESSION_05.md) · [06 cross-cutting](QA_SESSION_06.md) · [07 gap closing](QA_SESSION_07.md) · [08 webhooks, accounting, DEBUG off](QA_SESSION_08.md) · [09 static files, re-check, tenant sweep](QA_SESSION_09.md) · [10 concurrency](QA_SESSION_10.md)
 
 **Totals:** 73 numbered issues (QA-001 … QA-074; QA-047 was never used). 2 Critical/High-security, 5 High/Medium-high, 22 Medium, 36 Low, 8 "verify / decide". Session 07 added QA-065 … QA-074 and widened QA-002, QA-003, QA-010, QA-025. Several were re-explained or downgraded later; the table below uses the latest understanding.
+
+**Session 10 (7 Oct 2026) added three open issues:** QA-079 (Medium on SQLite: concurrent writes return 500 "database is locked"), QA-080 (Medium: approving a shipment twice at once records two approvals and two audit events), QA-081 (Medium: approve and reject at the same moment are both recorded and the shipment ends approved). QA-080/081 were check-then-write races in `shipments.views.approve`/`reject`; all three are now fixed (row lock inside a transaction; SQLite waits for the write lock) and re-run in the browser.
 
 **Session 09 (7 Oct 2026) added one open issue:** QA-078 (Low: static files were cached for 60 seconds and not content-hashed; refines QA-063), now fixed with hashed file names and an immutable cache header. It also re-checked the earlier fixes in the browser (all held) and ran search-input and cross-tenant sweeps with no findings.
 
