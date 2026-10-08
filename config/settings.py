@@ -171,7 +171,7 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "ShipMatch <no-reply@localhost>")
 SITE_URL = env("SITE_URL", "http://localhost:8000").rstrip("/")
 
 # --- File storage: S3/MinIO when a bucket is configured, local disk otherwise ---
-STATIC_BACKEND = ("whitenoise.storage.CompressedStaticFilesStorage" if not DEBUG
+STATIC_BACKEND = ("whitenoise.storage.CompressedManifestStaticFilesStorage" if not DEBUG
                   else "django.contrib.staticfiles.storage.StaticFilesStorage")
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
