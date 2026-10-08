@@ -1,7 +1,8 @@
 /* Evidence highlighting: click a value (or an issue) and the PDF scrolls to where it was read.
 
    Progressive enhancement. The page works without this file: the browser's own PDF viewer shows the
-   document in the iframe. When PDF.js (static/vendor/pdfjs, loaded on demand) is available, this file
+   document in the iframe. When PDF.js (static/vendor/pdfjs, loaded once the viewer is near the screen or a
+   document is asked for, so stacked mobile layouts don't download 1.8 MB up front) is available, this file
    renders the PDF itself and draws boxes from the positions the server found (ExtractedField.location,
    delivered as JSON script tags). Scanned documents without word positions keep the browser viewer.
    CSP-safe: no inline code, no eval; PDF.js and its worker come from our own /static/. */
@@ -77,6 +78,27 @@
   }
 
   var pdfjs = null;
+  var started = null;
+  var unavailable = false;
+  /* Resolves true once PDF.js is ready; false if it can't load (the page then keeps the browser viewer). */
+  function start() {
+    if (!started) {
+      started = loadPdfjs().then(function (mod) { pdfjs = mod; return true; }, function (err) {
+        // No PDF.js (old browser, blocked file): put the page back as it was, with the browser's PDF viewer.
+        if (window.console) { console.warn("Evidence viewer unavailable.", err); }
+        unavailable = true;
+        viewer.hidden = true;
+        aside.classList.remove("ev-on", "ev-native");
+        if (frame && !frame.isConnected) { aside.appendChild(frame); }
+        document.querySelectorAll(".ev-locate").forEach(function (b) { b.remove(); });
+        document.querySelectorAll(".ev-row").forEach(function (r) { r.classList.remove("ev-row", "ev-row-on"); });
+        document.querySelectorAll("[data-evidence-issue]").forEach(function (b) { b.hidden = true; });
+        return false;
+      });
+    }
+    return started;
+  }
+
   var state = { doc: null, pdf: null, task: null, pages: [], zoom: 1, scale: 0, ready: null, generation: 0 };
   var observer = null;
 
@@ -123,6 +145,7 @@
 
   /* Show a document in the pane. Resolves true when PDF.js shows it (boxes can be drawn). */
   function showDoc(d) {
+    if (unavailable) { return Promise.resolve(false); }
     syncChrome(d);
     if (state.doc === d && state.ready) { return state.ready; }
     state.doc = d;
@@ -131,7 +154,10 @@
       state.ready = Promise.resolve(false);
       return state.ready;
     }
-    state.ready = openPdf(d).then(function () { return true; }, function (err) {
+    state.ready = start().then(function (ok) {
+      if (!ok || state.doc !== d) { return false; }
+      return openPdf(d).then(function () { return true; });
+    }).then(null, function (err) {
       if (state.doc !== d) { return false; }
       if (window.console) { console.warn("Evidence viewer: falling back to the browser viewer.", err); }
       useNative(d, MSG.failed);
@@ -600,7 +626,7 @@
   // "Show PDF" buttons (app.js updates the title, the Open link and the active card; this shows the document).
   document.addEventListener("click", function (e) {
     var btn = e.target.closest ? e.target.closest("[data-pdf-url]") : null;
-    if (!btn || !pdfjs) { return; }
+    if (!btn || unavailable) { return; }
     var d = docByUrl(btn.getAttribute("data-pdf-url"));
     if (d) { showDoc(d); }
   });
@@ -622,16 +648,19 @@
     usePdfjs();  // stop the browser viewer early so it doesn't flash before the pages render
     setStatus("Opening " + first.title + "...", false);
   }
-  loadPdfjs().then(function (mod) {
-    pdfjs = mod;
-    enhanceRows();
-    enhanceIssues();
-    showDoc(first);
-  }, function (err) {
-    // No PDF.js (old browser, blocked file): put the page back as it was, with the browser's PDF viewer.
-    if (window.console) { console.warn("Evidence viewer unavailable.", err); }
-    viewer.hidden = true;
-    aside.classList.remove("ev-on", "ev-native");
-    if (frame && !frame.isConnected) { aside.appendChild(frame); }
-  });
+  enhanceRows();
+  enhanceIssues();
+
+  // Open the first document when the viewer is (nearly) on screen: at once beside the fields on wide screens,
+  // on scrolling down where the layout is stacked. Clicking a value or "Show PDF" first opens that one instead.
+  function openFirst() { if (!state.doc) { showDoc(first); } }
+  var NEAR = 400;
+  if (aside.getBoundingClientRect().top < window.innerHeight + NEAR) {
+    openFirst();
+  } else {
+    var near = new IntersectionObserver(function (entries) {
+      if (entries.some(function (en) { return en.isIntersecting; })) { near.disconnect(); openFirst(); }
+    }, { rootMargin: NEAR + "px 0px" });
+    near.observe(aside);
+  }
 })();
