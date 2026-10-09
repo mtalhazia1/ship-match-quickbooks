@@ -70,9 +70,17 @@ def has_perm(user, org: Organization | None, perm: str) -> bool:
     return role is not None and ROLE_RANK[role] >= ROLE_RANK[PERMISSION_MIN_ROLE[perm]]
 
 
+class RoleDenied(PermissionDenied):
+    """A role check failed. Carries the organization and permission so the 403 page can audit it (QA-027)."""
+
+    def __init__(self, message: str, org: Organization | None = None, perm: str = ""):
+        super().__init__(message)
+        self.org, self.perm = org, perm
+
+
 def require(user, org: Organization | None, perm: str) -> None:
     if not has_perm(user, org, perm):
-        raise PermissionDenied(f"Your role does not allow you to {PERMISSION_TEXT[perm]}.")
+        raise RoleDenied(f"Your role does not allow you to {PERMISSION_TEXT[perm]}.", org, perm)
     if mfa_missing(user, org):
         # The sign-in middleware checks the organization in use; this covers objects of another organization
         # reached by id (comments, links from alerts, the firm view).

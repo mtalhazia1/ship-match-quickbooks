@@ -70,6 +70,7 @@ ACTIONS = {
     "auth.logout": "signed out",
     "auth.login_failed": "failed to sign in (wrong username or password)",
     "auth.locked_out": "was blocked from signing in after too many failed attempts",
+    "auth.denied": "was refused: {reason} ({method} {path})",
     "auth.mfa_failed": "entered a wrong two-factor code",
     "auth.mfa_enabled": "turned on two-factor authentication",
     "auth.mfa_disabled": "turned off two-factor authentication",

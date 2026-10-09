@@ -212,6 +212,13 @@ def _rate_limit(request) -> None:
         raise HttpError(429, f"Rate limit is {limit} requests per minute. Try again shortly.")
 
 
+def _refuse(request, org, perm: str, message: str, key=None):
+    from apps.core.errors import record_denial
+
+    record_denial(request, org=org, permission=perm, reason=message, api_key=key)
+    raise HttpError(403, message)
+
+
 def _org(request, slug: str, perm: str = "view", scope: str = ""):
     """The organization in the URL, if the caller may use it for `perm` (and, for an API key, `scope`)."""
     _rate_limit(request)
@@ -220,14 +227,14 @@ def _org(request, slug: str, perm: str = "view", scope: str = ""):
         if key.organization.slug != slug:
             raise HttpError(404, "Not found")
         if ROLE_RANK[key.role] < ROLE_RANK[PERMISSION_MIN_ROLE[perm]]:
-            raise HttpError(403, "This API key is read only. Create a key with upload access.")
+            _refuse(request, key.organization, perm, "This API key is read only. Create a key with upload access.", key)
         if scope and not apiscopes.allows(key, scope):
-            raise HttpError(403, f"This API key doesn't have the {scope} scope. Create a key that includes it "
-                                 "in Settings > API keys.")
+            _refuse(request, key.organization, perm, f"This API key doesn't have the {scope} scope. Create a key that "
+                                                      "includes it in Settings > API keys.", key)
         return key.organization
     org = get_object_or_404(orgs_for_user(request.user), slug=slug)
     if not has_perm(request.user, org, perm):
-        raise HttpError(403, "Your role does not allow this.")
+        _refuse(request, org, perm, "Your role does not allow this.")
     return org
 
 

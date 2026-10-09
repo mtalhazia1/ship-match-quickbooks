@@ -301,3 +301,56 @@ def test_pages_render_for_every_role(client, user, viewer, approver, admin_user,
         client.force_login(u)
         for p in pages:
             assert client.get(p).status_code == 200, (u.username, p)
+
+
+# ---------------------------------------------------------------- QA-027: refused actions are audited
+
+
+@pytest.mark.django_db
+def test_refused_action_is_recorded_in_the_audit_log(client, user, approver, loaded):
+    """The QA case: a reviewer trying to override an error gets 403, and the admins can see that they tried."""
+    client.force_login(user)
+    error = ValidationIssue.objects.filter(organization=loaded, severity="error", resolved=False).first()
+    url = reverse("review:resolve_issue", args=[error.pk])
+    assert client.post(url, {"note": "Looks fine to me, honestly."}).status_code == 403
+    event = AuditEvent.objects.get(action="auth.denied")
+    assert event.organization == loaded and event.actor == user
+    assert event.data["method"] == "POST" and event.data["path"] == url
+    assert event.data["permission"] == "override_error" and "override" in event.data["reason"]
+
+    client.force_login(approver)   # it shows in the audit log, in words
+    body = client.get(reverse("core:audit")).content.decode()
+    assert "Was refused: Your role does not allow you to override errors. (POST" in body
+
+
+@pytest.mark.django_db
+def test_repeated_refusals_are_recorded_once_a_minute(client, user, loaded):
+    client.force_login(user)
+    url = reverse("review:approve", args=[_ready(loaded).pk])
+    for _ in range(5):
+        assert client.post(url).status_code == 403
+    assert AuditEvent.objects.filter(action="auth.denied").count() == 1
+
+
+@pytest.mark.django_db
+def test_a_stranger_refused_in_another_company_stays_out_of_its_log(client, user, loaded):
+    from django.http import HttpRequest
+
+    from apps.core.errors import record_denial
+
+    other = Organization.objects.create(name="Other", slug="other")
+    request = HttpRequest()
+    request.method, request.path, request.user = "POST", "/x/", user
+    record_denial(request, org=other, permission="manage", reason="no")
+    event = AuditEvent.objects.get(action="auth.denied")
+    assert event.organization is None and event.actor == user
+
+
+@pytest.mark.django_db
+def test_api_key_refused_for_a_scope_is_recorded(client, loaded):
+    key, token = create_key(loaded, "Ships", "viewer", None, None, scopes=["shipments:read"])
+    r = client.get(f"/api/{loaded.slug}/documents", HTTP_AUTHORIZATION=f"Bearer {token}")
+    assert r.status_code == 403
+    event = AuditEvent.objects.get(action="auth.denied")
+    assert event.organization == loaded and event.actor is None
+    assert event.data["api_key"] == "Ships" and "scope" in event.data["reason"]
