@@ -11,7 +11,6 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.core.files.storage import default_storage
-from apps.core.paging import Paginator
 from django.db import connection
 from django.db.models import Q
 from django.http import JsonResponse, StreamingHttpResponse
@@ -23,6 +22,7 @@ from apps.accounting.services.providers import active_connection
 from apps.accounts.models import ApiKey
 from apps.accounts.services.apikeys import create_key
 from apps.core import csvsafe, timezones
+from apps.core.paging import Paginator
 from apps.shipments.labels import describe_action
 
 from . import dashboard as dash

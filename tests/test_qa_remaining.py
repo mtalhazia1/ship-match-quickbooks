@@ -7,7 +7,6 @@ from apps.shipments.models import Shipment
 
 from .conftest import PASSWORD
 
-
 # ---------------------------------------------------------------- QA-051: organization name length
 
 

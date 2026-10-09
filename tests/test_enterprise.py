@@ -174,6 +174,27 @@ def test_login_lockout_after_repeated_failures(client, user, settings):
 
 
 @pytest.mark.django_db
+def test_new_password_lifts_a_sign_in_lockout(client, user, settings):
+    """QA-050: the locked-out message says to reset the password; doing so must let the person in."""
+    settings.LOGIN_MAX_FAILURES_PER_USER = 3
+    for _ in range(3):
+        client.post(reverse("accounts:login"), {"username": "reviewer", "password": "wrong-password"})
+    new = "a-brand-new-pass-2026-qz"
+    user.set_password(new)
+    user.save()
+    r = client.post(reverse("accounts:login"), {"username": "reviewer", "password": new})
+    assert r.status_code == 302 and client.session["_auth_user_id"] == str(user.pk)
+
+
+def test_production_warns_about_a_per_process_cache():
+    from apps.accounts.checks import cache_warnings
+
+    locmem, redis = "django.core.cache.backends.locmem.LocMemCache", "django.core.cache.backends.redis.RedisCache"
+    assert [w.id for w in cache_warnings(False, locmem)] == ["accounts.W001"]
+    assert cache_warnings(True, locmem) == [] and cache_warnings(False, redis) == []
+
+
+@pytest.mark.django_db
 def test_two_factor_sign_in(client, user):
     secret, _ = mfa.start_enrollment(user)
     codes = mfa.confirm_enrollment(user, pyotp.TOTP(secret).now())

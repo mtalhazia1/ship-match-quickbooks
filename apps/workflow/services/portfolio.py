@@ -16,7 +16,7 @@ from django.utils import timezone
 from apps.accounting.models import PostedBill
 from apps.core.models import Membership, Organization
 from apps.shipments.models import Shipment, ValidationIssue
-from apps.shipments.services.approval import approval_blockers, shipment_totals
+from apps.shipments.services.approval import approval_blockers, prefetch_approval, shipment_totals
 
 from .decisions import mfa_missing
 
@@ -187,8 +187,10 @@ def my_work(user, *, client: str = "", kind: str = "", limit: int = 300) -> tupl
             items[s.pk] = WorkItem(s, assigned=True)
     if kind in ("", "approve"):
         approver_orgs = [o for o in orgs if roles.get(o.pk) in APPROVER_ROLES]
-        for s in (Shipment.objects.filter(organization__in=approver_orgs, status=Shipment.Status.READY)
-                  .select_related("organization").order_by("created_at")[:limit]):
+        ready = list(Shipment.objects.filter(organization__in=approver_orgs, status=Shipment.Status.READY)
+                     .select_related("organization").order_by("created_at")[:limit])
+        prefetch_approval(ready)
+        for s in ready:
             item = items.get(s.pk) or WorkItem(s)
             item.blockers = approval_blockers(s, user)
             item.can_approve = not item.blockers

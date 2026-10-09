@@ -45,6 +45,9 @@ class Command(BaseCommand):
         if created:
             user.set_password(opts["password"])
             user.save()
+        elif opts["superuser"] and not (user.is_superuser and user.is_staff):
+            user.is_staff = user.is_superuser = True   # asked for on a second run: don't ignore it
+            user.save(update_fields=["is_staff", "is_superuser"])
         Membership.objects.update_or_create(user=user, organization=org, defaults={"role": Membership.Role.ADMIN})
         made = [user.username]
 

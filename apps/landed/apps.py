@@ -27,7 +27,7 @@ class LandedConfig(AppConfig):
         context_processors.SECTIONS.setdefault("landed:report", "landed")
         context_processors.SECTIONS.setdefault("landed:settings", "settings")
         register_shipment_rule(rules.check_shared)
-        register_approval_blocker(rules.approval_blockers)
+        register_approval_blocker(rules.approval_blockers, prefetch=rules.prefetch_approval)
         register_posting_blocker(allocation.posting_blockers)
 
         # A shared invoice posts as one bill with each shipment's share on its own lines.

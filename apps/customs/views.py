@@ -11,12 +11,12 @@ from datetime import date
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from apps.core.paging import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
+from apps.core.paging import Paginator
 from apps.core.permissions import require
 from apps.core.utils import audit, current_org, orgs_for_user, use_org
 

@@ -35,7 +35,7 @@ This copies the project (without `.env`, databases, uploads, `real_docs/` or `.g
 2. turns on the firewall for ports 22, 80 and 443, and adds a 2 GB swap file if there is none;
 3. creates `/opt/shipmatch/shared/.env` from `.env.example` with new random values for
    `DJANGO_SECRET_KEY`, `FIELD_ENCRYPTION_KEY` and `POSTGRES_PASSWORD` (readable by root only, never printed),
-   and sets `DOMAIN`, `DJANGO_DEBUG=0` and the QuickBooks redirect URI;
+   and sets `DOMAIN`, `DJANGO_DEBUG=0`, `SITE_URL` (links in alerts, and the redirect URIs) and the QuickBooks redirect URI;
 4. starts `docker compose -f docker-compose.yml -f docker-compose.prod.yml` under the project name
    `shipmatch`, waits for `/health/ready/`, and builds the demo organization when `DEMO_MODE=1`;
 5. installs a nightly backup (02:15 server time) and keeps the last 5 releases.

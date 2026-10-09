@@ -1,7 +1,7 @@
 """Team management for organization admins: invite, change role or limit, remove, reset 2FA."""
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model

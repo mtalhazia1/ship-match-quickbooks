@@ -11,7 +11,6 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core import signing
 from django.core.exceptions import PermissionDenied
-from apps.core.paging import Paginator
 from django.db.models import Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -23,6 +22,7 @@ from django.views.decorators.http import require_POST, require_safe
 from apps.accounting.models import vendor_key
 from apps.core import timezones
 from apps.core.models import Membership, Organization
+from apps.core.paging import Paginator
 from apps.core.permissions import has_perm, membership_for, require
 from apps.core.utils import audit, current_org, orgs_for_user, use_org
 from apps.documents.models import Document, ExtractedField
@@ -571,7 +571,6 @@ def client_list(request):
 
 
 def _zones():
-    import zoneinfo
 
     return timezones.choices()
 

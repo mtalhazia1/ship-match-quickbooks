@@ -16,7 +16,7 @@ from apps.core.permissions import membership_for
 from apps.shipments.models import Shipment
 from apps.shipments.services.validation import ERROR, WARNING, IssueSpec
 
-from ..models import SharedInvoice
+from ..models import InvoiceAllocation, SharedInvoice
 from . import allocation
 from .charges import invoice_number
 
@@ -91,7 +91,19 @@ def unconfirmed_splits(shipment: Shipment) -> list[str]:
             if allocation.adds_up(doc, rows) and not allocation.is_confirmed(si, rows)]
 
 
+def prefetch_approval(shipments) -> None:
+    """Marks the shipments that have nothing to do with a shared invoice, so approval_blockers can skip them."""
+    ids = [s.pk for s in shipments]
+    involved = set(InvoiceAllocation.objects.filter(shipment_id__in=ids).values_list("shipment_id", flat=True))
+    involved |= set(SharedInvoice.objects.filter(document__match__shipment_id__in=ids)
+                    .values_list("document__match__shipment_id", flat=True))
+    for s in shipments:
+        s._no_shared_invoices = s.pk not in involved
+
+
 def approval_blockers(shipment: Shipment, user) -> list[str]:
+    if getattr(shipment, "_no_shared_invoices", False):
+        return []
     reasons = []
     for si, doc, rows, is_primary in _active_splits(shipment):
         number = invoice_number(doc)

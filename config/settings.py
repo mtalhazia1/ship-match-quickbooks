@@ -171,7 +171,7 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "ShipMatch <no-reply@localhost>")
 SITE_URL = env("SITE_URL", "http://localhost:8000").rstrip("/")
 
 # --- File storage: S3/MinIO when a bucket is configured, local disk otherwise ---
-STATIC_BACKEND = ("whitenoise.storage.CompressedStaticFilesStorage" if not DEBUG
+STATIC_BACKEND = ("whitenoise.storage.CompressedManifestStaticFilesStorage" if not DEBUG
                   else "django.contrib.staticfiles.storage.StaticFilesStorage")
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
@@ -309,7 +309,7 @@ INBOUND_EMAIL_RATE_PER_MINUTE = int(env("INBOUND_EMAIL_RATE_PER_MINUTE", "60")) 
 MS_CLIENT_ID = env("MS_CLIENT_ID")
 MS_CLIENT_SECRET = env("MS_CLIENT_SECRET")
 MS_TENANT = env("MS_TENANT", "common") or "common"
-MS_REDIRECT_URI = env("MS_REDIRECT_URI", "http://localhost:8000/settings/email/microsoft/callback")
+MS_REDIRECT_URI = env("MS_REDIRECT_URI") or f"{SITE_URL}/settings/email/microsoft/callback"
 # IMAP hosts on private networks (10.x, 192.168.x, localhost) are refused unless this is on.
 MAILBOX_ALLOW_PRIVATE_HOSTS = env_bool("MAILBOX_ALLOW_PRIVATE_HOSTS", False)
 
@@ -317,13 +317,13 @@ MAILBOX_ALLOW_PRIVATE_HOSTS = env_bool("MAILBOX_ALLOW_PRIVATE_HOSTS", False)
 QBO_CLIENT_ID = env("QBO_CLIENT_ID")
 QBO_CLIENT_SECRET = env("QBO_CLIENT_SECRET")
 QBO_ENVIRONMENT = env("QBO_ENVIRONMENT", "sandbox")  # sandbox | production
-QBO_REDIRECT_URI = env("QBO_REDIRECT_URI", "http://localhost:8000/accounting/qbo/callback")
+QBO_REDIRECT_URI = env("QBO_REDIRECT_URI") or f"{SITE_URL}/accounting/qbo/callback"
 QBO_MINOR_VERSION = env("QBO_MINOR_VERSION", "75")
 
 # --- Xero (apps.accounting; README "Xero"). An organization posts to QuickBooks or Xero, never both. ---
 XERO_CLIENT_ID = env("XERO_CLIENT_ID")
 XERO_CLIENT_SECRET = env("XERO_CLIENT_SECRET")   # empty = a PKCE app in the Xero portal (no secret, PKCE sign-in)
-XERO_REDIRECT_URI = env("XERO_REDIRECT_URI", "http://localhost:8000/accounting/xero/callback")
+XERO_REDIRECT_URI = env("XERO_REDIRECT_URI") or f"{SITE_URL}/accounting/xero/callback"
 # Xero apps created from 2 March 2026 must ask for granular scopes instead of accounting.transactions:
 # offline_access accounting.invoices accounting.payments.read accounting.contacts accounting.settings accounting.attachments
 XERO_SCOPES = env("XERO_SCOPES", "offline_access accounting.transactions accounting.contacts accounting.settings "

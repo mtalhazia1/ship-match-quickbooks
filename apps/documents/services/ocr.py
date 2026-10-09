@@ -33,10 +33,13 @@ class TextResult:
 def read_text(pdf_bytes: bytes) -> TextResult:
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         pages = [(p.extract_text() or "") for p in pdf.pages]
-    n = len(pages)
-    text = "\n\f\n".join(pages).strip()
-    if n and len(text) / n >= MIN_CHARS_PER_PAGE:
-        return TextResult(text, n, False, "text_layer")
+        n = len(pages)
+        text = "\n\f\n".join(pages).strip()
+        sparse = not n or len(text) / n < MIN_CHARS_PER_PAGE
+        # Little text is only a scan if there is a picture of a page to read: a sparse but typed PDF (a short
+        # line per page, QA-073) has nothing more for OCR to find. No text at all may be text drawn as shapes.
+        if not sparse or (text and not any(_mostly_image(p) for p in pdf.pages)):
+            return TextResult(text, n, False, "text_layer")
     provider = ocr_provider()
     if provider == "textract":
         ocr_text, words = textract_read(pdf_bytes)
@@ -52,6 +55,18 @@ def read_text(pdf_bytes: bytes) -> TextResult:
         if len(ocr.strip()) >= MIN_CHARS_PER_PAGE:
             return TextResult(ocr, n, False, "anthropic")
     return TextResult(text, n, True, "none")
+
+
+def _mostly_image(page, share: float = 0.3) -> bool:
+    """True if images cover at least `share` of the page (a scanned or photographed page)."""
+    area = float(page.width * page.height) or 1.0
+    covered = 0.0
+    for im in page.images:
+        w = min(float(im["x1"]), float(page.width)) - max(float(im["x0"]), 0.0)
+        h = min(float(im["bottom"]), float(page.height)) - max(float(im["top"]), 0.0)
+        if w > 0 and h > 0:
+            covered += w * h
+    return covered / area >= share
 
 
 def ocr_provider() -> str:

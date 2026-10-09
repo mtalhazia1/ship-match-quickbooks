@@ -246,7 +246,7 @@
       <strong id="pdf-title">{{ first.original_filename|default:"No document" }}</strong>
       {% if first %}<a id="pdf-open" class="btn btn-sm btn-quiet" href="{% url 'review:document_file' first.pk %}" target="_blank" rel="noopener">{% icon "external" %} Open</a>{% endif %}
     </div>
-    <iframe id="pdf-frame" title="Source document" src="{% if first %}{% url 'review:document_file' first.pk %}{% endif %}"></iframe>
+    <iframe id="pdf-frame" title="Source document" loading="lazy" src="{% if first %}{% url 'review:document_file' first.pk %}{% endif %}"></iframe>
     {% if first %}{% include "evidence/_viewer.html" %}{% endif %}
     {% endwith %}
   </aside>

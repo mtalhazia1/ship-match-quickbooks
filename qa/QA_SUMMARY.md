@@ -7,16 +7,23 @@ Period: 3–4 Oct 2026. Method: exploratory testing in the in-app browser, issue
 
 ---
 
-## Fix status (updated 7 Oct 2026)
+## Fix status (updated 8 Oct 2026)
 
-Fixes are in commits `0aea335`, `0d04083` and `fdbe801` (earlier branch) and `fe46865` (`fix/qa-remaining`).
+Fixes are in commits `0aea335`, `0d04083` and `fdbe801` (earlier branch), `fe46865` (`fix/qa-remaining`) and the 8 Oct commits on `claude/optimistic-johnson-s7l5qg`.
 
 - **Fixed:** QA-001, 002, 003, 004, 005, 006*, 007*, 008, 009, 010, 011, 012, 013, 014, 015, 017, 018, 024, 025, 026, 028, 029, 030, 032, 033, 034, 035, 036, 038, 039, 041, 042, 043, 044, 046, 048, 049, 051, 053, 054, 055, 058, 060, 061, 062, 064, 065, 066, 067, 068, 069, 071, 072, 074.
   (QA-006 and QA-007 were checked in the browser at 375 px and 1024 px on SHP-000041 and SHP-000044.)
-- **Partly fixed:** QA-056 (totals are paged; about 5 queries per ready shipment remain).
-- **Not a defect on inspection:** QA-019 (different bytes, not duplicates), QA-037 and QA-052 (messages exist and render), QA-045, QA-070.
-- **Left open, performance or deployment:** QA-057 (pdf.js loads eagerly; the evidence highlighting depends on it), QA-063 (static file caching), QA-031 (redirect URI comes from `.env`).
-- **Left open, product decisions:** QA-016, 020, 022, 023, 027, 040, 050, 059, 073.
+- **Fixed 8 Oct:**
+  - QA-056: approval checks on My work run in bulk (40 ready shipments: 244 → 50 queries; no longer grows with the list).
+  - QA-057: PDF.js loads when the viewer nears the screen or a document is asked for (stacked/mobile layouts no longer download 1.8 MB up front).
+  - QA-063: production uses hashed static names (`immutable`, 10-year cache, gzip). Also fixed: the favicon URL was resolved at import, which would have stopped `migrate` on a fresh production container.
+  - QA-073: little text counts as a scan only when a page is mostly image (or there is no text at all).
+  - QA-050: a new password lifts a sign-in lockout (the lockout message tells people to reset it); system check `accounts.W001` warns when production runs with a per-process cache. Production already uses Redis.
+  - QA-031: Microsoft, QuickBooks and Xero redirect URIs default to `SITE_URL` + path. Production now sets `SITE_URL` (alert/email links and the Microsoft redirect URI pointed at `http://localhost:8000`).
+  - QA-020: a plain `seed_demo` already matches the README; `--superuser` now also promotes an existing admin.
+- **Partly fixed:** none.
+- **Not a defect on inspection:** QA-019 (different bytes, not duplicates), QA-037 and QA-052 (messages exist and render), QA-045, QA-070, QA-023 (`docker-compose.prod.yml` and the droplet script set `DJANGO_DEBUG=0`), QA-016 (`/try/` and `/signup/` are off unless `DEMO_MODE` / `SIGNUP_ENABLED` is set).
+- **Left open, product decisions:** QA-022 (which total approval limits use), 027 (audit denied actions?), 040 (per-company shipment numbers), 059 (dark mode, forced colours, rem font sizes).
 
 ---
 

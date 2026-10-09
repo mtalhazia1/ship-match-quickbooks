@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from apps.core.paging import Paginator
 from django.db.models import Count, Q
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -19,6 +18,7 @@ from apps.accounting.models import PostedBill, VendorMapping, vendor_key
 from apps.accounting.services.payments import filter_shipments
 from apps.accounting.services.providers import active_connection, set_rule_account
 from apps.core.context_processors import LOOSE_STATUSES
+from apps.core.paging import Paginator
 from apps.core.permissions import require
 from apps.core.utils import audit, current_org, orgs_for_user, use_org
 from apps.documents.models import Document
