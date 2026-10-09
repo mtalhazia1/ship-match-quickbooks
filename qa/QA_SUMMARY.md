@@ -21,9 +21,10 @@ Fixes are in commits `0aea335`, `0d04083` and `fdbe801` (earlier branch), `fe468
   - QA-050: a new password lifts a sign-in lockout (the lockout message tells people to reset it); system check `accounts.W001` warns when production runs with a per-process cache. Production already uses Redis.
   - QA-031: Microsoft, QuickBooks and Xero redirect URIs default to `SITE_URL` + path. Production now sets `SITE_URL` (alert/email links and the Microsoft redirect URI pointed at `http://localhost:8000`).
   - QA-020: a plain `seed_demo` already matches the README; `--superuser` now also promotes an existing admin.
+  - QA-027 (9 Oct): refused actions (web 403s and API 403s, including API-key scope refusals) are written to the audit log as "was refused: <reason> (<method> <path>)", at most once a minute per person and URL; only into an organization's log when the person belongs to it.
 - **Partly fixed:** none.
 - **Not a defect on inspection:** QA-019 (different bytes, not duplicates), QA-037 and QA-052 (messages exist and render), QA-045, QA-070, QA-023 (`docker-compose.prod.yml` and the droplet script set `DJANGO_DEBUG=0`), QA-016 (`/try/` and `/signup/` are off unless `DEMO_MODE` / `SIGNUP_ENABLED` is set).
-- **Left open, product decisions:** QA-022 (which total approval limits use), 027 (audit denied actions?), 040 (per-company shipment numbers), 059 (dark mode, forced colours, rem font sizes).
+- **Left open, product decisions:** QA-022 (which total approval limits use), 040 (per-company shipment numbers), 059 (dark mode, forced colours, rem font sizes).
 
 ---
 
