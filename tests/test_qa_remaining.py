@@ -774,3 +774,32 @@ def test_export_links_are_built_from_one_resolved_pattern(settings):
     settings.SITE_URL = "https://other.example.test"            # a changed setting is honoured
     assert _link("review:document", 7).startswith("https://other.example.test/")
     assert _link("review:document", 7) == "https://other.example.test" + reverse("review:document", args=[7])
+
+
+# ---------------------------------------------------------------- QA-090: the Savings export at scale
+
+
+@pytest.mark.django_db
+def test_savings_export_with_more_than_a_thousand_shipments(client, org, approver):
+    """Loading 1,100 catches' shipments in one go made SQLite refuse the query ("Expression tree is too large")."""
+    from decimal import Decimal
+
+    from django.utils import timezone
+
+    from apps.rates.models import CaughtCharge
+
+    n = 1100
+    Shipment.objects.bulk_create([Shipment(organization=org, bl_number=f"SAV{i}", reference=f"SHP-SAV{i:05d}")
+                                  for i in range(n)])
+    now = timezone.now()
+    CaughtCharge.objects.bulk_create([
+        CaughtCharge(organization=org, scope=f"s{s.pk}", catch_key=f"k{s.pk}", code="over_quote", shipment=s,
+                     vendor_name="V", currency="USD", amount_caught=Decimal("10.00"),
+                     amount_latest=Decimal("10.00"), first_caught_at=now, last_seen_at=now)
+        for s in Shipment.objects.filter(organization=org, bl_number__startswith="SAV")])
+    client.force_login(approver)
+    r = client.get(reverse("savings:export"))
+    assert r.status_code == 200
+    lines = r.content.decode().splitlines()
+    assert len(lines) == n + 1
+    assert sum("SHP-SAV" in line for line in lines) == n

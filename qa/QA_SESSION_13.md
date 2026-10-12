@@ -84,6 +84,8 @@ Branch under test: `fix/qa-session-13` at `80d46bf`. Same 3,000-shipment data se
 **QA-090 — Medium (SQLite) — The Savings CSV export returns HTTP 500 once the period holds about 2,000 catches. This is a regression from the QA-089 fix (`ebff5e8`).**
 `/savings/export.csv` calls `summary(..., limit=None)`. The QA-089 change replaced `select_related("shipment", "document")` with `prefetch_related_objects(...)` over every catch row. SQLite then fails with `OperationalError: Expression tree is too large (maximum depth 1000)` (`apps/rates/savings.py:322`). Measured on the same data: 1,500 catches work, 2,000 fail, and the org had 3,024. On the commit before the fix (`92c0b91`, run in a temporary worktree against the same data) the export returned **200 in 0.76 s**. The Savings page itself is fine because it shows only 25 rows. PostgreSQL has no such limit (not re-run there). Repro: load the session 13 data set, sign in as admin, open Savings, click Export CSV.
 
+**Fixed (12 Oct).** The actual limit is on distinct shipments, not catches. Django prefetches this foreign key as `id = 1 OR id = 2 OR …`, one term per distinct shipment. Here there were 1,134 shipments, so 1,133 `OR`s, and SQLite allows at most 1,000. The prefetch now runs in batches of 500 catches. On the same data the export returns **200 in 0.49 s with 20 queries**, the same 348 KB file as before the regression. A test exports 1,100 catches on 1,100 shipments; it fails without the fix.
+
 ### 7b. Re-check of the 8 Oct fixes (all hold)
 
 | Item | 8 Oct after fix | 12 Oct | Note |

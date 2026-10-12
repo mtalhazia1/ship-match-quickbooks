@@ -319,7 +319,11 @@ def summary(org, start: date, end: date, *, limit: int | None = 25) -> Savings:
     s.by_month = list(months.values())
     s.catches = rows if limit is None else rows[:limit]
     # Documents are only shown for the rows on view, so load them for those rather than for every catch.
-    prefetch_related_objects([r.catch for r in s.catches], "document", "shipment")
+    # In batches: Django prefetches a foreign key as "id = 1 OR id = 2 OR ...", and SQLite refuses more than
+    # 1,000 terms, so an export of a few thousand catches failed (QA-090).
+    shown = [r.catch for r in s.catches]
+    for start in range(0, len(shown), 500):
+        prefetch_related_objects(shown[start:start + 500], "document", "shipment")
     _add_recoveries(org, s)
     return s
 
