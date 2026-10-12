@@ -5,7 +5,9 @@ Period: 3–4 Oct 2026. Method: exploratory testing in the in-app browser, issue
 
 **Totals:** 73 numbered issues (QA-001 … QA-074; QA-047 was never used). 2 Critical/High-security, 5 High/Medium-high, 22 Medium, 36 Low, 8 "verify / decide". Session 07 added QA-065 … QA-074 and widened QA-002, QA-003, QA-010, QA-025. Several were re-explained or downgraded later; the table below uses the latest understanding.
 
-**Session 13 (8 Oct 2026, 3,000 synthetic shipments) found five speed issues; four are fixed on branch `fix/qa-session-13`, one was withdrawn:** QA-085 (month-end report 16 s and 6.3 MB: now 5.8 s and 143 KB, lines paged, build faster; its Excel journal is still slow without `lxml`), QA-086 (My work 9.4 s and 1,984 queries: now 0.6–0.9 s and 193 queries), QA-087 (landed-cost report: withdrawn, a one-time catch-up caused by the synthetic data), QA-088 (API documents list: 209 queries now 9; exports 3–4 s faster), QA-089 (dashboard and Savings about 30% faster). The paged lists (queue, documents, audit, disputes, rates, search) stay under half a second.
+**Session 13 continued (12 Oct 2026, same data set, scratch copy of the database):** the fixes hold (My work 0.34 s, month-end page 2.2 s, API documents list 9 queries). 30 more pages were timed with no issues. One new issue: **QA-090** (Medium on SQLite, open): the Savings CSV export returns HTTP 500 once the period holds about 2,000 catches. It is a regression from the QA-089 fix: a prefetch over every catch exceeds SQLite's expression-depth limit, and the code before `ebff5e8` returned the file in 0.76 s. The slowest downloads are the documents Excel (17.8 s) and the month-end journal (5–10 s).
+
+**Session 13 (8 Oct 2026, 3,000 synthetic shipments) found five speed issues; four are fixed on branch `fix/qa-session-13`, one was withdrawn:** QA-085 (month-end report 16 s and 6.3 MB: now 5.8 s and 143 KB, lines paged, build faster; its Excel journal is still slow: `openpyxl` needs about 8 s to save 127,000 cells, and installing `lxml` did not help), QA-086 (My work 9.4 s and 1,984 queries: now 0.6–0.9 s and 193 queries), QA-087 (landed-cost report: withdrawn, a one-time catch-up caused by the synthetic data), QA-088 (API documents list: 209 queries now 9; exports 3–4 s faster), QA-089 (dashboard and Savings about 30% faster). The paged lists (queue, documents, audit, disputes, rates, search) stay under half a second.
 
 **Session 12 (8 Oct 2026, first run on PostgreSQL) added two issues, both fixed the same day:** QA-083 (the dispute settings page crashed on a reply-to address over 254 characters: SQLite does not enforce column lengths, Postgres does) and QA-084 (moving a document into a shipment that another request was emptying gave a 500 and could delete a shipment just after a document landed in it). All migrations, the demo build and the test suite (1,063 passing, one timing-flaky test, now made deterministic) work on Postgres; the row-lock fixes from session 10 hold on real row locks.
 
@@ -17,18 +19,26 @@ Period: 3–4 Oct 2026. Method: exploratory testing in the in-app browser, issue
 
 ---
 
-## Fix status (updated 7 Oct 2026)
+## Fix status (updated 12 Oct 2026)
 
-Fixes are in commits `0aea335`, `0d04083` and `fdbe801` (earlier branch) and `fe46865` (`fix/qa-remaining`).
+The fixes up to 7 Oct are in commits `0aea335`, `0d04083` and `fdbe801` (earlier branch) and `fe46865` (`fix/qa-remaining`). On 12 Oct the two lines of work were combined on `main` of `mtalhazia1/ship-match-quickbooks`: the 8–9 Oct fixes made there (`claude/optimistic-johnson-s7l5qg`, merged as PR #1 and #2) plus the session 08–13 fixes from `fix/qa-session-08` and `fix/qa-session-13`.
 
 - **Fixed:** QA-001, 002, 003, 004, 005, 006*, 007*, 008, 009, 010, 011, 012, 013, 014, 015, 017, 018, 024, 025, 026, 028, 029, 030, 032, 033, 034, 035, 036, 038, 039, 041, 042, 043, 044, 046, 048, 049, 051, 053, 054, 055, 058, 060, 061, 062, 064, 065, 066, 067, 068, 069, 071, 072, 074.
   (QA-006 and QA-007 were checked in the browser at 375 px and 1024 px on SHP-000041 and SHP-000044.)
-- **Sessions 08–13:** every issue found is fixed on its branch except QA-082 (cache headers on signed-in pages, verify), the Excel-journal speed (needs `lxml`) and the remaining export speed (a rewrite on plain queries).
-- **Session 08:** QA-075 and QA-076 fixed on branch `fix/qa-session-08`; QA-077 fixed too (the API docs page now uses the Swagger UI files bundled with django-ninja, under the normal Content-Security-Policy).
-- **Partly fixed:** QA-056 (totals are paged; about 5 queries per ready shipment remain).
-- **Not a defect on inspection:** QA-019 (different bytes, not duplicates), QA-037 and QA-052 (messages exist and render), QA-045, QA-070.
-- **Left open, performance or deployment:** QA-057 (pdf.js loads eagerly; the evidence highlighting depends on it), QA-063 (static file caching), QA-031 (redirect URI comes from `.env`).
-- **Left open, product decisions:** QA-016, 020, 022, 023, 027, 040, 050, 059, 073.
+- **Fixed 8–9 Oct (`mtalhazia1` line):**
+  - QA-056: approval checks on My work run in bulk (`prefetch_approval`; 40 ready shipments: 244 → 50 queries). This is the design kept when the two lines were combined; the session 13 version of the same fix (QA-086, `bulk_hints`) was dropped.
+  - QA-057: PDF.js loads when the viewer nears the screen or a document is asked for (stacked/mobile layouts no longer download 1.8 MB up front).
+  - QA-063: production uses hashed static names (`immutable`, 10-year cache, gzip); the same change as QA-078. Also fixed: the favicon URL was resolved at import, which would have stopped `migrate` on a fresh production container.
+  - QA-073: little text counts as a scan only when a page is mostly image (or there is no text at all).
+  - QA-050: a new password lifts a sign-in lockout (the lockout message tells people to reset it); system check `accounts.W001` warns when production runs with a per-process cache. Production already uses Redis.
+  - QA-031: Microsoft, QuickBooks and Xero redirect URIs default to `SITE_URL` + path. Production now sets `SITE_URL`.
+  - QA-020: a plain `seed_demo` already matches the README; `--superuser` now also promotes an existing admin.
+  - QA-027: refused actions (web and API 403s, including API-key scope refusals) are written to the audit log, at most once a minute per person and URL.
+- **Fixed in sessions 08–13:** QA-075, 076, 077, 078, 079, 080, 081, 083, 084, 085, 086, 088, 089 (details in each session log).
+- **Fixed 12 Oct while combining:** My work for an approver **with an approval limit** still ran about 7 queries per ready shipment in both versions (3,000 shipments: 2,001 queries, 2.25 s). `Document.field()` ignored prefetched fields; it now reads them, and `prefetch_approval(with_totals=True)` loads the documents in bulk: 50 queries, 0.26 s.
+- **Open:** QA-090 (Savings CSV export 500 at about 2,000 catches on SQLite, session 13 continued), QA-082 (no `Cache-Control` on signed-in pages, verify), the Excel-journal and documents-Excel speed (openpyxl cell writing; `lxml` did not help) and the remaining export speed (a rewrite on plain queries).
+- **Not a defect on inspection:** QA-019 (different bytes, not duplicates), QA-037 and QA-052 (messages exist and render), QA-045, QA-070, QA-087 (synthetic data), QA-023 (`docker-compose.prod.yml` and the droplet script set `DJANGO_DEBUG=0`), QA-016 (`/try/` and `/signup/` are off unless `DEMO_MODE` / `SIGNUP_ENABLED` is set).
+- **Left open, product decisions:** QA-022 (which total approval limits use), 040 (per-company shipment numbers), 059 (dark mode, forced colours, rem font sizes).
 
 ---
 
