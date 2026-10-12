@@ -189,7 +189,9 @@ def my_work(user, *, client: str = "", kind: str = "", limit: int = 300) -> tupl
         approver_orgs = [o for o in orgs if roles.get(o.pk) in APPROVER_ROLES]
         ready = list(Shipment.objects.filter(organization__in=approver_orgs, status=Shipment.Status.READY)
                      .select_related("organization").order_by("created_at")[:limit])
-        prefetch_approval(ready)
+        limited = Membership.objects.filter(user=user, organization__in=approver_orgs,
+                                            approval_limit__isnull=False).exists()
+        prefetch_approval(ready, with_totals=limited)
         for s in ready:
             item = items.get(s.pk) or WorkItem(s)
             item.blockers = approval_blockers(s, user)

@@ -626,7 +626,7 @@ def test_batched_approval_check_gives_the_same_answers(org, approver):
 
     one_by_one = {bl: approval_blockers(s, approver) for bl, s in load().items()}
     batched = load()
-    prefetch_approval(list(batched.values()))
+    prefetch_approval(list(batched.values()), with_totals=True)
     answers = {bl: approval_blockers(s, approver) for bl, s in batched.items()}
     assert answers == one_by_one
     assert answers["A1"] == []
@@ -645,6 +645,53 @@ def test_my_work_uses_a_constant_number_of_queries(client, approver, org, django
     with django_assert_max_num_queries(45):                       # was about 7 queries per ready shipment
         r = client.get(reverse("workflow:my_work"))
     assert r.status_code == 200
+
+
+@pytest.mark.django_db
+def test_my_work_with_an_approval_limit_does_not_query_per_shipment(client, approver, org):
+    """An approver with a limit needs every shipment's total; that used to cost about 7 queries a shipment."""
+    from decimal import Decimal
+
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    from apps.core.models import Membership
+    from apps.documents.models import ExtractedField
+
+    Membership.objects.filter(user=approver, organization=org).update(approval_limit=Decimal("50000.00"))
+    client.force_login(approver)
+
+    def add(n):
+        for _ in range(n):
+            s = Shipment.objects.create(organization=org, bl_number=f"LIM{Shipment.objects.count()}",
+                                        status=Shipment.Status.READY)
+            doc = _doc_in(org, s, 700 + Shipment.objects.count())
+            for name, value in (("total_amount", "100.00"), ("currency", "USD"), ("vendor_name", "V")):
+                ExtractedField.objects.create(document=doc, name=name, value=value, confidence=1)
+
+    def queries():
+        client.get(reverse("workflow:my_work"))
+        with CaptureQueriesContext(connection) as ctx:
+            assert client.get(reverse("workflow:my_work")).status_code == 200
+        return len(ctx)
+
+    add(2)
+    few = queries()
+    add(10)
+    assert queries() == few
+
+
+@pytest.mark.django_db
+def test_document_field_reads_prefetched_fields(org, django_assert_num_queries):
+    from apps.documents.models import Document, ExtractedField
+
+    s = Shipment.objects.create(organization=org, bl_number="PF1")
+    doc = _doc_in(org, s, 901)
+    ExtractedField.objects.create(document=doc, name="total_amount", value="12.50", confidence=1)
+    doc = Document.objects.prefetch_related("fields").get(pk=doc.pk)
+    with django_assert_num_queries(0):
+        assert doc.field("total_amount") == "12.50"
+        assert doc.field("currency", "USD") == "USD"
 
 
 # ---------------------------------------------------------------- QA-088: the API lists documents without a query each

@@ -135,6 +135,8 @@ class Document(models.Model):
         return {f.name: f.value for f in self.fields.all()}
 
     def field(self, name: str, default=None):
+        if "fields" in getattr(self, "_prefetched_objects_cache", {}):   # prefetch_related("fields"): no query
+            return next((f.value for f in self.fields.all() if f.name == name), default)
         f = self.fields.filter(name=name).first()
         return f.value if f else default
 

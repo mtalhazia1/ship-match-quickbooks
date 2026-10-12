@@ -33,8 +33,10 @@ def register_approval_blocker(fn, prefetch=None) -> None:
         APPROVAL_PREFETCHERS.append(prefetch)
 
 
-def prefetch_approval(shipments) -> None:
-    """Load in a fixed number of queries what approval_blockers would otherwise query for each shipment."""
+def prefetch_approval(shipments, *, with_totals: bool = False) -> None:
+    """Load in a fixed number of queries what approval_blockers would otherwise query for each shipment.
+
+    with_totals also loads the documents behind shipment_totals (needed when the approver has a limit)."""
     shipments = list(shipments)
     if not shipments:
         return
@@ -46,6 +48,13 @@ def prefetch_approval(shipments) -> None:
     for s in shipments:
         s._open_errors = errors.get(s.pk, 0)
         s._makers = by_shipment.get(s.pk, set())
+    if with_totals:
+        docs: dict[int, list[Document]] = {}
+        for doc in (Document.objects.filter(match__shipment_id__in=ids).select_related("match")
+                    .prefetch_related("fields")):
+            docs.setdefault(doc.match.shipment_id, []).append(doc)
+        for s in shipments:
+            s._documents = docs.get(s.pk, [])
     for prefetch in APPROVAL_PREFETCHERS:
         prefetch(shipments)
 
@@ -79,7 +88,8 @@ def shipment_totals(shipment: Shipment) -> Totals:
     """What the shipment costs: payable invoices net of credit notes, per currency and in the home currency."""
     org = shipment.organization
     t = Totals()
-    for doc in shipment.documents.prefetch_related("fields"):
+    documents = getattr(shipment, "_documents", None)     # set by prefetch_approval(with_totals=True)
+    for doc in (shipment.documents.prefetch_related("fields") if documents is None else documents):
         if not doc.posts_to_accounting:
             continue
         try:
