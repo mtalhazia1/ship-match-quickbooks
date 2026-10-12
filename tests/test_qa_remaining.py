@@ -603,7 +603,7 @@ def test_batched_approval_check_gives_the_same_answers(org, approver):
     org.maker_checker = True
     org.save()
     Membership.objects.filter(user=approver, organization=org).update(approval_limit=Decimal("500.00"))
-    clean = Shipment.objects.create(organization=org, bl_number="A1", status=Shipment.Status.READY)
+    Shipment.objects.create(organization=org, bl_number="A1", status=Shipment.Status.READY)
     broken = Shipment.objects.create(organization=org, bl_number="A2", status=Shipment.Status.READY)
     held = Shipment.objects.create(organization=org, bl_number="A3", status=Shipment.Status.READY)
     prepared = Shipment.objects.create(organization=org, bl_number="A4", status=Shipment.Status.READY)
@@ -737,8 +737,8 @@ def test_month_end_report_pages_its_lines(client, approver, org, monkeypatch):
 
 @pytest.mark.django_db
 def test_month_end_history_reads_values_without_field_objects(org):
-    from apps.documents.models import ExtractedField
     from apps.close.services import history
+    from apps.documents.models import ExtractedField
 
     s = Shipment.objects.create(organization=org, bl_number="H1")
     doc = _doc_in(org, s, 40)
