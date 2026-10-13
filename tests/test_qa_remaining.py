@@ -803,3 +803,25 @@ def test_savings_export_with_more_than_a_thousand_shipments(client, org, approve
     lines = r.content.decode().splitlines()
     assert len(lines) == n + 1
     assert sum("SHP-SAV" in line for line in lines) == n
+
+
+# ---------------------------------------------------------------- QA-082: no copies of signed-in pages
+
+
+@pytest.mark.django_db
+def test_signed_in_pages_and_downloads_are_not_stored(client, approver, org):
+    from apps.accounts.models import ApiKey
+    from apps.accounts.services.apikeys import create_key
+
+    assert "Cache-Control" not in client.get(reverse("roi:calculator")).headers    # public page: unchanged
+    login = client.get(reverse("accounts:login"))
+    assert "no-store" in login["Cache-Control"]                                     # its own never_cache stays
+    client.force_login(approver)
+    for name in ("core:dashboard", "review:queue", "savings:export", "core:audit"):
+        r = client.get(reverse(name))
+        assert r.status_code == 200, name
+        assert r["Cache-Control"] == "private, no-store", name
+    client.logout()
+    _, token = create_key(org, "ERP", ApiKey.Role.VIEWER, approver, None)
+    r = client.get(f"/api/{org.slug}/shipments", HTTP_AUTHORIZATION=f"Bearer {token}")
+    assert r.status_code == 200 and r["Cache-Control"] == "private, no-store"

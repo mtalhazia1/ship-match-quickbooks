@@ -37,7 +37,8 @@ The fixes up to 7 Oct are in commits `0aea335`, `0d04083` and `fdbe801` (earlier
 - **Fixed in sessions 08–13:** QA-075, 076, 077, 078, 079, 080, 081, 083, 084, 085, 086, 088, 089 (details in each session log).
 - **Fixed 12 Oct while combining:** My work for an approver **with an approval limit** still ran about 7 queries per ready shipment in both versions (3,000 shipments: 2,001 queries, 2.25 s). `Document.field()` ignored prefetched fields; it now reads them, and `prefetch_approval(with_totals=True)` loads the documents in bulk: 50 queries, 0.26 s.
 - **Fixed 12 Oct:** QA-090 (Savings CSV export 500 once the catches span more than about 1,000 shipments on SQLite; the shipment prefetch now runs in batches of 500; 0.49 s at 3,000 shipments).
-- **Open:** QA-082 (no `Cache-Control` on signed-in pages, verify), the Excel-journal and documents-Excel speed (openpyxl cell writing; `lxml` did not help) and the remaining export speed (a rewrite on plain queries).
+- **Fixed 13 Oct:** QA-082 (every response to a signed-in user or an API key now carries `Cache-Control: private, no-store`, unless the view sets its own; the original-file views keep `private, max-age=300` so the evidence viewer does not download a PDF twice).
+- **Open:** the Excel-journal and documents-Excel speed (openpyxl cell writing; `lxml` did not help) and the remaining export speed (a rewrite on plain queries).
 - **Not a defect on inspection:** QA-019 (different bytes, not duplicates), QA-037 and QA-052 (messages exist and render), QA-045, QA-070, QA-087 (synthetic data), QA-023 (`docker-compose.prod.yml` and the droplet script set `DJANGO_DEBUG=0`), QA-016 (`/try/` and `/signup/` are off unless `DEMO_MODE` / `SIGNUP_ENABLED` is set).
 - **Left open, product decisions:** QA-022 (which total approval limits use), 040 (per-company shipment numbers), 059 (dark mode, forced colours, rem font sizes).
 
