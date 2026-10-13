@@ -2,7 +2,7 @@
 
 The filters are the list pages' own (status tab, search, document view and type), so an export holds what the
 person was looking at. Rows are produced one by one from the database in chunks (CSV is streamed to the
-browser; Excel is written in write-only mode to a temporary file), and every row goes through
+browser; Excel is written in constant-memory mode to a temporary file), and every row goes through
 apps.core.csvsafe so a vendor name like "=HYPERLINK(...)" stays text in Excel.
 """
 from __future__ import annotations
@@ -22,6 +22,7 @@ from django.utils import timezone
 
 from apps.core import csvsafe
 from apps.core.context_processors import LOOSE_STATUSES
+from apps.core.xlsx import Book
 from apps.documents.models import Document, ExtractedField
 from apps.documents.schemas import SCHEMAS
 from apps.shipments.models import MatchLink, Shipment, ValidationIssue
@@ -374,44 +375,24 @@ def csv_chunks(export: Export) -> Iterator[str]:
         yield writer.writerow(csvsafe.row([_csv_value(v) for v in row]))
 
 
-def _xlsx_value(value):
-    if isinstance(value, Decimal):
-        return float(value)
-    return value
-
-
 def write_xlsx(export: Export):
-    """Write the workbook to a temporary file (write-only mode keeps memory flat) and return it, rewound."""
-    from openpyxl import Workbook
-    from openpyxl.cell import WriteOnlyCell
-    from openpyxl.styles import Font
-
-    wb = Workbook(write_only=True)
-    ws = wb.create_sheet(export.kind.capitalize())
-    ws.freeze_panes = "A2"
-    bold = Font(bold=True)
-    head = []
-    for title in csvsafe.row(export.header):
-        c = WriteOnlyCell(ws, value=title)
-        c.font = bold
-        head.append(c)
-    ws.append(head)
+    """Write the workbook to a temporary file (constant-memory mode keeps memory flat) and return it, rewound."""
+    out = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, suffix=".xlsx")
+    book = Book(out, constant_memory=True)
+    ws = book.sheet(export.kind.capitalize())
+    ws.freeze_panes(1, 0)
+    book.write_row(ws, 0, csvsafe.row(export.header), bold=True)
     limit = settings.EXPORT_XLSX_MAX_ROWS
     for n, row in enumerate(export.rows):
         if n >= limit:
-            ws.append([f"Stopped after {limit:,} rows. Use the CSV export (no limit) or narrow the filters."])
+            book.write(ws, n + 1, 0, f"Stopped after {limit:,} rows. Use the CSV export (no limit) or narrow the filters.")
             break
-        cells = []
-        for value in csvsafe.row([_xlsx_value(v) for v in row]):
-            cell = WriteOnlyCell(ws, value=value)
-            if isinstance(value, str):
-                cell.data_type = "s"  # never a formula, whatever the text starts with
-            elif isinstance(value, datetime):
-                cell.number_format = "yyyy-mm-dd hh:mm"
-            cells.append(cell)
-        ws.append(cells)
-    out = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, suffix=".xlsx")
-    wb.save(out)
+        for col, value in enumerate(csvsafe.row(row)):    # text is always written as text, never a formula
+            if isinstance(value, datetime):
+                book.write(ws, n + 1, col, value, num_format="yyyy-mm-dd hh:mm")
+            else:
+                book.write(ws, n + 1, col, value)
+    book.close()
     out.seek(0)
     return out
 
