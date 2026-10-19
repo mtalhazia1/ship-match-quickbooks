@@ -1,5 +1,8 @@
 # Never bake secrets, local data or private documents into the image.
 .env
+.env.*
+!.env.example
+local-test-accounts.txt
 secrets/
 real_docs/
 db.sqlite3
@@ -16,3 +19,6 @@ __pycache__/
 .ruff_cache/
 dump.rdb
 .deploy
+# Not needed to run the app (the development stack mounts the source folder, tests included).
+tests/
+qa/

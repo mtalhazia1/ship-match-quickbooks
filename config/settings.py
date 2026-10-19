@@ -27,7 +27,8 @@ def env_list(name: str, default: str = "") -> list[str]:
     return [v.strip() for v in env(name, default).split(",") if v.strip()]
 
 
-SECRET_KEY = env("DJANGO_SECRET_KEY", "dev-insecure-key-change-me")
+DEV_SECRET_KEY = "dev-insecure-key-change-me"   # public (it is in this file): refused when DEBUG is off
+SECRET_KEY = env("DJANGO_SECRET_KEY") or DEV_SECRET_KEY
 DEBUG = env_bool("DJANGO_DEBUG", True)
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS")
@@ -220,6 +221,11 @@ CELERY_BEAT_SCHEDULE = {
     "alerts-daily-digest-hourly": {
         "task": "apps.notifications.tasks.send_daily_digests",
         "schedule": crontab(minute=2),
+    },
+    # Documents whose reading task was lost (broker down at upload or restarted, worker killed).
+    "documents-requeue-stalled": {
+        "task": "apps.documents.tasks.requeue_stalled_documents",
+        "schedule": 300.0,
     },
     # Alerts whose scheduled retry was lost (worker restart).
     "alerts-retry-stalled": {
@@ -455,6 +461,21 @@ LOGGING = {
 
 # --- Production security (DJANGO_DEBUG=0) ---
 if not DEBUG:
+    # Refuse to start (web, worker and beat alike) rather than run with a key anyone can read: the secret key
+    # signs sessions and password-reset links, the encryption key protects stored OAuth tokens (QA-101).
+    from cryptography.fernet import Fernet
+    from django.core.exceptions import ImproperlyConfigured
+
+    if SECRET_KEY in {DEV_SECRET_KEY, "change-me"} or SECRET_KEY.startswith("django-insecure-"):
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY must be set to a long random value when DJANGO_DEBUG=0. Generate one with: "
+            "python -c \"import secrets; print(secrets.token_urlsafe(50))\"")
+    try:
+        Fernet(env("FIELD_ENCRYPTION_KEY").encode())
+    except ValueError:
+        raise ImproperlyConfigured(
+            "FIELD_ENCRYPTION_KEY must be set to a Fernet key when DJANGO_DEBUG=0. Generate one with: "
+            "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"") from None
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

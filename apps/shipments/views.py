@@ -25,7 +25,7 @@ from apps.core.utils import audit, current_org, orgs_for_user, use_org
 from apps.documents.models import Document
 from apps.documents.schemas import SCHEMAS, TABLE_FIELDS
 from apps.documents.services.corrections import EDITABLE, FieldValueError, after_correction, correct_field
-from apps.documents.services.ingest import RejectedFile, ingest_bytes
+from apps.documents.services.ingest import UNFINISHED, RejectedFile, ingest_bytes
 from apps.shipments.models import Approval, Shipment, ValidationIssue
 from apps.shipments.services.approval import approval_blockers, posting_blockers, shipment_totals
 from apps.shipments.services.matching import ShipmentGone, assign_manually
@@ -217,7 +217,12 @@ def upload(request):
     for level, text in archive_messages(archives):
         messages.add_message(request, level, text)
     for name, doc in duplicates:
-        where = f" It is in {doc.match.shipment.reference}." if hasattr(doc, "match") else ""
+        if hasattr(doc, "match"):
+            where = f" It is in {doc.match.shipment.reference}."
+        elif doc.status in UNFINISHED:   # re-queued by ingest_bytes when its earlier reading was lost
+            where = " It is being read; refresh in a minute to see the result."
+        else:
+            where = ""
         if doc.original_filename and doc.original_filename != name:   # same contents under another name
             messages.info(request, f"{name} has the same contents as {doc.original_filename}, which was uploaded "
                                    f"before, so it was not added again.{where}")

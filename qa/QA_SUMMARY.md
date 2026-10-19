@@ -1,9 +1,31 @@
-# ShipMatch QA — prioritised summary of sessions 01–13
+# ShipMatch QA — prioritised summary of sessions 01–21
 
 Period: 3–4 Oct 2026. Method: exploratory testing in the in-app browser, issues listed only (nothing was fixed), against the local demo data plus the empty **Northwind Traders (test)** org for destructive tests. Detail, repro steps and evidence are in the per-session logs:
-[01 platform sweep](QA_SESSION_01.md) · [02 approval loop](QA_SESSION_02.md) · [03 disputes & month-end](QA_SESSION_03.md) · [04 intake & integrations](QA_SESSION_04.md) · [05 accounts & admin](QA_SESSION_05.md) · [06 cross-cutting](QA_SESSION_06.md) · [07 gap closing](QA_SESSION_07.md) · [08 webhooks, accounting, DEBUG off](QA_SESSION_08.md) · [09 static files, re-check, tenant sweep](QA_SESSION_09.md) · [10 concurrency](QA_SESSION_10.md) · [11 exports, reset, caching](QA_SESSION_11.md) · [12 PostgreSQL](QA_SESSION_12.md) · [13 scale](QA_SESSION_13.md)
+[01 platform sweep](QA_SESSION_01.md) · [02 approval loop](QA_SESSION_02.md) · [03 disputes & month-end](QA_SESSION_03.md) · [04 intake & integrations](QA_SESSION_04.md) · [05 accounts & admin](QA_SESSION_05.md) · [06 cross-cutting](QA_SESSION_06.md) · [07 gap closing](QA_SESSION_07.md) · [08 webhooks, accounting, DEBUG off](QA_SESSION_08.md) · [09 static files, re-check, tenant sweep](QA_SESSION_09.md) · [10 concurrency](QA_SESSION_10.md) · [11 exports, reset, caching](QA_SESSION_11.md) · [12 PostgreSQL](QA_SESSION_12.md) · [13 scale](QA_SESSION_13.md) · [18 background workers](QA_SESSION_18.md) · [19 production rehearsal](QA_SESSION_19.md) · [20 load on PostgreSQL](QA_SESSION_20.md) · [21 security deep-dive](QA_SESSION_21.md)
+
+Sessions 14–17 (planned: webhook delivery to a real receiver, a real mailbox, QuickBooks/Xero OAuth) have not been run.
 
 **Totals:** 73 numbered issues (QA-001 … QA-074; QA-047 was never used). 2 Critical/High-security, 5 High/Medium-high, 22 Medium, 36 Low, 8 "verify / decide". Session 07 added QA-065 … QA-074 and widened QA-002, QA-003, QA-010, QA-025. Several were re-explained or downgraded later; the table below uses the latest understanding.
+
+**Sessions 18–21 (16–17 Oct 2026, run in the order 18, 21, 19, 20) added 15 issues, QA-091 … QA-105.** First runs with real Celery workers and Redis (18), a role-by-route security matrix of 2,280 web requests and 119 API cases (21: no isolation or permission gaps), the production Docker stack behind Caddy with a backup/restore drill (19) and 25 concurrent users on PostgreSQL (20). Three are fixed on branch `fix/qa-sessions-18-21` (see Fix status); the rest are open:
+
+| # | Severity | Issue | Status |
+|---|---|---|---|
+| QA-101 | High | Production started with the public default `DJANGO_SECRET_KEY` when the key was missing | **Fixed 19 Oct** |
+| QA-091 | Medium/High | A document uploaded while the broker was down returned 500, was never read and could not be re-sent | **Fixed 19 Oct** |
+| QA-102 | Medium | `local-test-accounts.txt` (with a password) was copied into the production image | **Fixed 19 Oct** |
+| QA-092 | Medium | A document whose worker died mid-read stays "Extracted" for an hour with a misleading message | Mostly fixed by the QA-091 sweep (re-read after 15 min); the visibility timeout and the "nothing found" message remain |
+| QA-093 | Medium | Production Redis has no persistence: queued work is lost on a crash | Open (documents are now recovered by the sweep; add a volume and `appendonly`) |
+| QA-094 | Medium | With the cache down, sign-in and every API call return 500 | Open |
+| QA-097 | Medium | Password reset has no rate limit (inbox flooding) | Open |
+| QA-098 | Medium | Small hostile PDFs (20,000 pages, deep nesting) hold a worker; no page limit, no task time limit, OCR on every page | Open (the sweep's 3-attempt cap stops endless re-reads) |
+| QA-105 | Medium | gunicorn runs a fixed 3 sync workers: 25 busy users wait 3–5 s per page | Open |
+| QA-103 | Low/Medium | Caddy's 30 MB body limit is below the app's ZIP (100 MB) and email (40 MB) limits: bare 413 | Open |
+| QA-095 | Low | "Post bills" and "Check payments now" return 500 when the broker is down | Open |
+| QA-096 | Low | Tasks for rows deleted while queued fail with `DoesNotExist` | Open |
+| QA-099 | Low | A statement whose stored file is missing gives 500 | Open |
+| QA-100 | Low | Dependencies are not pinned; no lock file; test tools in the production image | Open |
+| QA-104 | Low | `deploy/backup.sh` doesn't back up the PDFs in the default setup | Open |
 
 **Session 13 continued (12 Oct 2026, same data set, scratch copy of the database):** the fixes hold (My work 0.34 s, month-end page 2.2 s, API documents list 9 queries). 30 more pages were timed with no issues. One new issue: **QA-090** (Medium on SQLite, fixed the same day): the Savings CSV export returns HTTP 500 once the period holds about 2,000 catches. It is a regression from the QA-089 fix: a prefetch over every catch exceeds SQLite's expression-depth limit, and the code before `ebff5e8` returned the file in 0.76 s. The slowest downloads are the documents Excel (17.8 s) and the month-end journal (5–10 s).
 
@@ -19,7 +41,7 @@ Period: 3–4 Oct 2026. Method: exploratory testing in the in-app browser, issue
 
 ---
 
-## Fix status (updated 12 Oct 2026)
+## Fix status (updated 19 Oct 2026)
 
 The fixes up to 7 Oct are in commits `0aea335`, `0d04083` and `fdbe801` (earlier branch) and `fe46865` (`fix/qa-remaining`). On 12 Oct the two lines of work were combined on `main` of `mtalhazia1/ship-match-quickbooks`: the 8–9 Oct fixes made there (`claude/optimistic-johnson-s7l5qg`, merged as PR #1 and #2) plus the session 08–13 fixes from `fix/qa-session-08` and `fix/qa-session-13`.
 
@@ -39,6 +61,10 @@ The fixes up to 7 Oct are in commits `0aea335`, `0d04083` and `fdbe801` (earlier
 - **Fixed 12 Oct:** QA-090 (Savings CSV export 500 once the catches span more than about 1,000 shipments on SQLite; the shipment prefetch now runs in batches of 500; 0.49 s at 3,000 shipments).
 - **Fixed 13 Oct:** QA-082 (every response to a signed-in user or an API key now carries `Cache-Control: private, no-store`, unless the view sets its own; the original-file views keep `private, max-age=300` so the evidence viewer does not download a PDF twice).
 - **Improved 13 Oct (rest of QA-085 and QA-088):** Excel files are now written with XlsxWriter instead of openpyxl (openpyxl still reads uploaded spreadsheets). At 3,000 shipments: documents Excel 15.7 → 6.3 s, month-end journal 7.8 → 4.6 s, shipments Excel 7.0 → 4.3 s, issues Excel 3.1 → 1.6 s, and the files are up to 60% smaller. All seven Excel downloads were compared cell by cell with the old output (values, types, number formats, fonts, fills, widths, frozen panes): identical.
+- **Fixed 19 Oct (`fix/qa-sessions-18-21`):**
+  - QA-101: with `DJANGO_DEBUG=0` the settings refuse to load (web, worker and beat) when `DJANGO_SECRET_KEY` is missing, the built-in default, `change-me` or `django-insecure-…`, or `FIELD_ENCRYPTION_KEY` is missing or not a Fernet key.
+  - QA-091: queuing a document never fails the upload (a broker error is logged and the document stays "received"); uploading an unread document again re-queues it after 2 minutes; a beat task (`requeue_stalled_documents`, every 5 minutes) re-queues documents left "received" or "extracted" for 15 minutes, at most 3 times, then marks them as errors. While the broker is down it waits without using up attempts. Also covers QA-092's stuck documents.
+  - QA-102: `.dockerignore` leaves out `local-test-accounts.txt`, `.env.*`, `tests/` and `qa/`.
 - **Open:** the CSV exports of shipments and documents still take about 4 s at 3,000 shipments (building about 50,000 Django objects; a rewrite on plain queries would help).
 - **Not a defect on inspection:** QA-019 (different bytes, not duplicates), QA-037 and QA-052 (messages exist and render), QA-045, QA-070, QA-087 (synthetic data), QA-023 (`docker-compose.prod.yml` and the droplet script set `DJANGO_DEBUG=0`), QA-016 (`/try/` and `/signup/` are off unless `DEMO_MODE` / `SIGNUP_ENABLED` is set).
 - **Left open, product decisions:** QA-022 (which total approval limits use), 040 (per-company shipment numbers), 059 (dark mode, forced colours, rem font sizes).
