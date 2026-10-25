@@ -1,3 +1,8 @@
+# Version ranges. The production image installs the exact, hash-checked versions in requirements.lock, and
+# development the same versions plus the test tools (requirements-dev.lock). After changing this file or
+# requirements-dev.txt, run the commands at the top of both lock files (requirements.lock first), then
+# `pip-audit -r requirements.lock --require-hashes --disable-pip`.
+
 # Web
 Django>=5.2.8,<5.3      # 5.2 LTS; 5.2.8+ supports Python 3.14
 django-ninja>=1.3
@@ -27,7 +32,7 @@ google-api-python-client>=2.120
 google-auth-oauthlib>=1.2
 
 # Intake of messy inputs (pure Python)
-pypdf>=3.17            # split PDFs that hold several invoices; count pages
+pypdf>=6.21.2          # split PDFs that hold several invoices; count pages
 openpyxl>=3.1          # read .xlsx invoices
 defusedxml>=0.7        # openpyxl uses it to refuse harmful XML in .xlsx files
 XlsxWriter>=3.2        # write .xlsx exports and journals (about 2.4x faster than openpyxl at writing cells)
@@ -36,6 +41,4 @@ XlsxWriter>=3.2        # write .xlsx exports and journals (about 2.4x faster tha
 reportlab>=4.1
 Pillow>=10.0           # scanned-look PDFs; photos and scans (JPG, PNG, TIFF, WebP) to PDF
 
-# Tests
-pytest>=8.0
-pytest-django>=4.8
+# Tests and lint: requirements-dev.txt (not installed in the production image)

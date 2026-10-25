@@ -13,8 +13,11 @@ def post_shipment_task(self, shipment_id: int, user_id: int | None = None):
 
     from apps.accounting.services.posting import post_shipment
 
+    shipment = Shipment.objects.filter(pk=shipment_id).first()
+    if shipment is None:   # deleted while the task waited (split undone, demo reset): nothing to post (QA-096)
+        return {"skipped": "no_shipment"}
     actor = get_user_model().objects.filter(pk=user_id).first() if user_id else None
-    return post_shipment(Shipment.objects.get(pk=shipment_id), actor=actor)
+    return post_shipment(shipment, actor=actor)
 
 
 @shared_task

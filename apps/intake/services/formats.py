@@ -106,25 +106,40 @@ def check_pdf(filename: str, content: bytes) -> None:
         reader = PdfReader(io.BytesIO(content), strict=False)
         if reader.is_encrypted and not reader.decrypt(""):   # many "protected" PDFs open with an empty password
             raise _PasswordProtected
-        if len(reader.pages) > 0:
+        pages = len(reader.pages)
+        if pages > settings.INTAKE_MAX_PAGES:
+            raise RejectedFile(_too_many_pages(filename, pages))
+        if pages > 0:
             return
     except _PasswordProtected:
         raise RejectedFile(f"{filename}: this PDF is protected with a password. Open it, choose Print > Save as PDF "
                            "to make an unprotected copy, and send that.") from None
+    except RejectedFile:
+        raise
     except Exception:   # pypdf raises many kinds of errors for broken files; fall back to the other reader
         pass
     try:
         import pdfplumber
 
         with pdfplumber.open(io.BytesIO(content)) as pdf:
-            if len(pdf.pages) > 0:
-                return
+            pages = len(pdf.pages)
+        if pages > settings.INTAKE_MAX_PAGES:
+            raise RejectedFile(_too_many_pages(filename, pages))
+        if pages > 0:
+            return
+    except RejectedFile:
+        raise
     except Exception as e:
         if type(e).__name__ in ("PDFPasswordIncorrect", "PDFEncryptionError"):
             raise RejectedFile(f"{filename}: this PDF is protected with a password. Open it, choose Print > Save as "
                                "PDF to make an unprotected copy, and send that.") from None
     raise RejectedFile(f"{filename}: this file isn't a readable PDF. It may be damaged or cut short. Open the "
                        "original, save it as PDF again, and send that.")
+
+
+def _too_many_pages(filename: str, pages: int) -> str:
+    return (f"{filename}: this PDF has {pages:,} pages; the limit is {settings.INTAKE_MAX_PAGES:,}. Split it into "
+            "smaller files and send those.")
 
 
 class _PasswordProtected(Exception):

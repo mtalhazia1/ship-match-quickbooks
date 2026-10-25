@@ -17,6 +17,7 @@ from urllib.parse import urlencode
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -24,6 +25,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.accounting.models import QBOConnection, vendor_key
+from apps.core.errors import open_stored
 from apps.core.money import AmountError, parse_amount
 from apps.core.paging import Paginator
 from apps.core.permissions import has_perm, require
@@ -394,7 +396,7 @@ def statement_file(request, pk: int):
     content_type = {"pdf": "application/pdf", "csv": "text/csv",
                     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}.get(
         st.source_format, "application/octet-stream")
-    return FileResponse(st.file.open("rb"), as_attachment=True, filename=st.original_filename,
+    return FileResponse(open_stored(st.file, "file for this statement"), as_attachment=True, filename=st.original_filename,
                         content_type=content_type)
 
 
@@ -492,8 +494,11 @@ def statement_delete(request, pk: int):
     st = _statement(request, pk, "approve")
     audit(st.organization, "close.statement_deleted", st, actor=request.user, vendor=st.vendor_name or "?",
           filename=st.original_filename, statement_date=str(st.statement_date or ""))
-    st.file.delete(save=False)
-    st.delete()
+    with transaction.atomic():
+        st.delete()
+        # Only once the row is gone for good: a failed delete must not leave a record pointing at nothing.
+        if st.file.name:
+            transaction.on_commit(lambda name=st.file.name, storage=st.file.storage: storage.delete(name))
     messages.success(request, "Statement deleted. Its findings and notes are kept in the audit log.")
     return redirect("close:statements")
 

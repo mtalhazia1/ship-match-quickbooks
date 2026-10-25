@@ -15,7 +15,6 @@ import re
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
 from django.utils import timezone
-from kombu.exceptions import OperationalError as BrokerError
 
 from apps.core.models import Organization
 from apps.core.utils import audit
@@ -162,14 +161,10 @@ def dispatch(doc: Document, process: str | None = None) -> Document:
 def queue(doc_id: int) -> bool:
     """Hand a stored document to the background worker. With the broker unreachable the document stays
     "received" and the stalled-document sweep queues it later: the upload itself still succeeds (QA-091)."""
+    from apps.core.resilience import enqueue
     from apps.documents.tasks import process_document_task
 
-    try:
-        process_document_task.delay(doc_id)
-    except (BrokerError, ConnectionError, TimeoutError):
-        log.warning("Could not queue document %s; it will be queued again by the sweep", doc_id, exc_info=True)
-        return False
-    return True
+    return enqueue(process_document_task, doc_id)
 
 
 UNFINISHED = (Document.Status.RECEIVED, Document.Status.EXTRACTED)   # reading or matching never completed

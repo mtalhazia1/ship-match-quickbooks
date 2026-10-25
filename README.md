@@ -51,7 +51,7 @@ can reach.
 ## Quick start (macOS / Linux)
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-dev.lock              # exact versions: the app as deployed, plus pytest and ruff
 python manage.py migrate
 python manage.py seed_demo                      # org "demo" and the demo users below (--superuser: admin also gets /admin/)
 python manage.py generate_dataset --out datasets/synthetic --shipments 20 --seed 42 --scanned 3
@@ -88,7 +88,8 @@ S3-compatible storage (MinIO) is optional: `docker compose --profile s3 up -d` a
 
 Production: `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
 (gunicorn + Caddy HTTPS, uploaded PDFs in a named volume). Needs `DJANGO_SECRET_KEY`,
-`FIELD_ENCRYPTION_KEY`, `POSTGRES_PASSWORD` and `DOMAIN` in `.env`. Nightly backups: `deploy/backup.sh`.
+`FIELD_ENCRYPTION_KEY`, `POSTGRES_PASSWORD` and `DOMAIN` in `.env`. Nightly backups (database and uploaded
+files): `deploy/backup.sh` from cron.
 For a single server with everything set up for you, see [Hosting](#hosting).
 
 ## Hosting

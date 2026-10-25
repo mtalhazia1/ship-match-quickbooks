@@ -5,12 +5,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+# Exact versions with hashes (requirements.lock, compiled from requirements.txt): every build installs what was tested.
+COPY requirements.lock .
+RUN pip install --require-hashes --no-deps -r requirements.lock
 COPY . .
 
 RUN mkdir -p /app/media /app/staticfiles && useradd --create-home app && chown -R app /app
 USER app
 
 EXPOSE 8000
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "120"]
+CMD ["gunicorn", "config.wsgi:application", "-c", "config/gunicorn.conf.py"]

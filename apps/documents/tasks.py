@@ -1,6 +1,7 @@
 import logging
 
 from celery import shared_task
+from django.conf import settings
 from django.db import OperationalError
 
 from apps.core.models import Organization
@@ -9,10 +10,14 @@ log = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, autoretry_for=(ConnectionError, TimeoutError, OperationalError), retry_backoff=True,
-             retry_jitter=True, max_retries=5)
+             retry_jitter=True, max_retries=5, soft_time_limit=settings.DOCUMENT_TASK_TIME_LIMIT,
+             time_limit=settings.DOCUMENT_TASK_TIME_LIMIT + 60)
 def process_document_task(self, doc_id: int):
+    from apps.documents.models import Document
     from apps.documents.services.pipeline import process_document
 
+    if not Document.objects.filter(pk=doc_id).exists():   # removed while the task waited (QA-096)
+        return {"document": doc_id, "skipped": "no_document"}
     doc = process_document(doc_id)
     return {"document": doc_id, "status": doc.status}
 

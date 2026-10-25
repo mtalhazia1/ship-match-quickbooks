@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from apps.core.errors import open_stored
 from apps.core.permissions import require
 from apps.core.utils import orgs_for_user, use_org
 from apps.documents.models import Document
@@ -40,7 +41,7 @@ def original_file(request, pk):
     if not doc.original_file:
         return redirect("review:document_file", pk=doc.pk)
     subtype = (doc.intake or {}).get("subtype") or ("zip" if doc.source_format == Document.Format.ARCHIVE else "")
-    response = FileResponse(doc.original_file.open("rb"), as_attachment=True, filename=doc.original_filename,
+    response = FileResponse(open_stored(doc.original_file, "original file of this document"), as_attachment=True, filename=doc.original_filename,
                             content_type=formats.media_type(doc.source_format, subtype))
     response["Cache-Control"] = "private, max-age=300"
     return response

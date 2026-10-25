@@ -207,6 +207,11 @@ class PasswordResetView(auth_views.PasswordResetView):
     subject_template_name = "account/email/password_reset_subject.txt"
     success_url = reverse_lazy("accounts:password_reset_done")
 
+    def form_valid(self, form):
+        if not lockout.allow_password_reset(form.cleaned_data["email"], client_ip_var.get()):
+            return redirect(self.success_url)   # same page as a sent email: nothing to learn, nothing sent
+        return super().form_valid(form)
+
 
 class PasswordResetConfirmView(auth_views.PasswordResetConfirmView):
     template_name = "account/password_set.html"
