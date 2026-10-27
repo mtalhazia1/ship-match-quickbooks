@@ -27,7 +27,8 @@ def env_list(name: str, default: str = "") -> list[str]:
     return [v.strip() for v in env(name, default).split(",") if v.strip()]
 
 
-SECRET_KEY = env("DJANGO_SECRET_KEY", "dev-insecure-key-change-me")
+DEV_SECRET_KEY = "dev-insecure-key-change-me"   # public (it is in this file): refused when DEBUG is off
+SECRET_KEY = env("DJANGO_SECRET_KEY") or DEV_SECRET_KEY
 DEBUG = env_bool("DJANGO_DEBUG", True)
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS")
@@ -156,6 +157,9 @@ SESSION_COOKIE_SAMESITE = "Lax"
 LOGIN_MAX_FAILURES_PER_USER = int(env("LOGIN_MAX_FAILURES_PER_USER", "5"))
 LOGIN_MAX_FAILURES_PER_IP = int(env("LOGIN_MAX_FAILURES_PER_IP", "25"))
 LOGIN_LOCKOUT_SECONDS = int(env("LOGIN_LOCKOUT_MINUTES", "15")) * 60
+# Password-reset emails per hour; requests beyond these get the same "sent" page but no email.
+PASSWORD_RESET_PER_EMAIL_PER_HOUR = int(env("PASSWORD_RESET_PER_EMAIL_PER_HOUR", "3"))
+PASSWORD_RESET_PER_IP_PER_HOUR = int(env("PASSWORD_RESET_PER_IP_PER_HOUR", "20"))
 PASSWORD_RESET_TIMEOUT = 3 * 24 * 3600   # invite and reset links: 3 days
 # Only trust X-Forwarded-For when running behind our own proxy (Caddy in production).
 TRUST_X_FORWARDED_FOR = env_bool("TRUST_X_FORWARDED_FOR", False)
@@ -221,6 +225,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.notifications.tasks.send_daily_digests",
         "schedule": crontab(minute=2),
     },
+    # Documents whose reading task was lost (broker down at upload or restarted, worker killed).
+    "documents-requeue-stalled": {
+        "task": "apps.documents.tasks.requeue_stalled_documents",
+        "schedule": 300.0,
+    },
     # Alerts whose scheduled retry was lost (worker restart).
     "alerts-retry-stalled": {
         "task": "apps.notifications.tasks.retry_stalled_deliveries",
@@ -274,6 +283,10 @@ ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY")
 OPENAI_API_KEY = env("OPENAI_API_KEY")
 # A field below this confidence is sent to human review (each organization can override it).
 REVIEW_CONFIDENCE_THRESHOLD = float(env("REVIEW_CONFIDENCE_THRESHOLD", "0.85"))
+# Paid reading (OCR of scans, the PDF sent to the AI) covers at most this many pages of one document.
+OCR_MAX_PAGES = int(env("OCR_MAX_PAGES", "50"))
+# Reading one document stops after this long, so a hostile file can't hold a worker (prefork workers only).
+DOCUMENT_TASK_TIME_LIMIT = int(env("DOCUMENT_TASK_TIME_LIMIT", "300"))
 
 # --- Intake: which files are accepted and the safety limits for each kind ---
 # PDFs, images (JPG, PNG, TIFF, WebP), spreadsheets (XLSX, CSV) and ZIP archives of those.
@@ -283,6 +296,7 @@ INTAKE_ZIP_MAX_FILES = int(env("INTAKE_ZIP_MAX_FILES", "200"))       # files ins
 INTAKE_ZIP_MAX_TOTAL_MB = int(env("INTAKE_ZIP_MAX_TOTAL_MB", "300"))  # everything inside one ZIP, unpacked
 INTAKE_ZIP_MAX_RATIO = int(env("INTAKE_ZIP_MAX_RATIO", "100"))       # unpacked size / packed size of one file
 INTAKE_ZIP_MAX_DEPTH = int(env("INTAKE_ZIP_MAX_DEPTH", "1"))         # a ZIP inside a ZIP is opened, no deeper
+INTAKE_MAX_PAGES = int(env("INTAKE_MAX_PAGES", "500"))              # pages of one PDF (QA-098: tiny files can hold 20,000)
 INTAKE_MAX_IMAGE_MEGAPIXELS = int(env("INTAKE_MAX_IMAGE_MEGAPIXELS", "120"))
 INTAKE_MAX_IMAGE_PAGES = int(env("INTAKE_MAX_IMAGE_PAGES", "50"))    # frames of a multi-page TIFF
 INTAKE_MAX_IMAGE_TOTAL_MEGAPIXELS = int(env("INTAKE_MAX_IMAGE_TOTAL_MEGAPIXELS", "500"))  # all frames together
@@ -455,6 +469,21 @@ LOGGING = {
 
 # --- Production security (DJANGO_DEBUG=0) ---
 if not DEBUG:
+    # Refuse to start (web, worker and beat alike) rather than run with a key anyone can read: the secret key
+    # signs sessions and password-reset links, the encryption key protects stored OAuth tokens (QA-101).
+    from cryptography.fernet import Fernet
+    from django.core.exceptions import ImproperlyConfigured
+
+    if SECRET_KEY in {DEV_SECRET_KEY, "change-me"} or SECRET_KEY.startswith("django-insecure-"):
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY must be set to a long random value when DJANGO_DEBUG=0. Generate one with: "
+            "python -c \"import secrets; print(secrets.token_urlsafe(50))\"")
+    try:
+        Fernet(env("FIELD_ENCRYPTION_KEY").encode())
+    except ValueError:
+        raise ImproperlyConfigured(
+            "FIELD_ENCRYPTION_KEY must be set to a Fernet key when DJANGO_DEBUG=0. Generate one with: "
+            "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"") from None
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

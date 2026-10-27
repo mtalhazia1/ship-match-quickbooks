@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 
 from apps.core import csvsafe
+from apps.core.xlsx import Book
 
 from ..models import Category
 
@@ -114,43 +115,30 @@ def _csv(rows) -> bytes:
 
 
 def _xlsx(sheets: list[Sheet]) -> bytes:
-    from openpyxl import Workbook
-    from openpyxl.styles import Font
-    from openpyxl.utils import get_column_letter
-
-    wb = Workbook()
-    wb.remove(wb.active)
+    out = io.BytesIO()
+    book = Book(out)
     for sheet in sheets:
-        ws = wb.create_sheet(sheet.name[:31])
-        r = 1
+        ws = book.sheet(sheet.name)
+        r = 0
         if sheet.title:
-            _text(ws.cell(row=1, column=1), sheet.title).font = Font(bold=True, size=12)
-            r = 3
-        for c, name in enumerate(sheet.head, start=1):
-            _text(ws.cell(row=r, column=c), name).font = Font(bold=True)
-        ws.freeze_panes = ws.cell(row=r + 1, column=1)
+            book.write(ws, 0, 0, sheet.title, bold=True, font_size=12)
+            r = 2
+        book.write_row(ws, r, sheet.head, bold=True)
+        ws.freeze_panes(r + 1, 0)
         for row in sheet.rows:
             r += 1
             for c, value in enumerate(row):
-                cell = ws.cell(row=r, column=c + 1)
                 fmt = sheet.formats.get(c)
                 if fmt and value not in (None, ""):
                     try:
-                        cell.value = float(Decimal(str(value)))
-                        cell.number_format = fmt
+                        book.write(ws, r, c, float(Decimal(str(value))), num_format=fmt)
                         continue
                     except Exception:
                         pass
-                _text(cell, value)
-        for c in range(1, len(sheet.head) + 1):
-            width = max([len(str(sheet.head[c - 1]))] + [len(str(row[c - 1])) for row in sheet.rows if len(row) >= c])
-            ws.column_dimensions[get_column_letter(c)].width = min(max(width + 2, 9), 48)
-    out = io.BytesIO()
-    wb.save(out)
+                # Everything else is text, so a value starting with "=" stays text and 00123 keeps its zeros.
+                book.write(ws, r, c, "" if value is None else str(value))
+        for c in range(len(sheet.head)):
+            width = max([len(str(sheet.head[c]))] + [len(str(row[c])) for row in sheet.rows if len(row) > c])
+            ws.set_column(c, c, min(max(width + 2, 9), 48))
+    book.close()
     return out.getvalue()
-
-
-def _text(cell, value):
-    cell.value = "" if value is None else str(value)
-    cell.data_type = "s"   # a value starting with "=" stays text, never a formula
-    return cell

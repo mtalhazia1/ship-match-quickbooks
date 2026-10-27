@@ -23,7 +23,8 @@
     <strong>This document isn't in a shipment yet.</strong>
     {% if doc.status == 'needs_ocr' %}It is a scanned image, so its text couldn't be read. Type the B/L, container or PO number below, or ask your administrator to turn on reading of scans and photos, then process it again.
     {% elif doc.status == 'error' %}It couldn't be processed. {{ doc.error|doc_error|truncatechars:240 }}
-    {% elif doc.status == 'received' %}It is being read now. Refresh in a few seconds.
+    {% elif stalled %}Reading it is taking longer than usual. It will be tried again automatically within a few minutes.
+    {% elif doc.status == 'received' or doc.status == 'extracted' %}It is being read now. Refresh in a few seconds.
     {% else %}No bill of lading, container or PO number was found that links it to a shipment. Add one below, or put it in a shipment by hand.{% endif %}
   </div>
 </div>

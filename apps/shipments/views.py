@@ -19,13 +19,15 @@ from apps.accounting.models import PostedBill, VendorMapping, vendor_key
 from apps.accounting.services.payments import filter_shipments
 from apps.accounting.services.providers import active_connection, set_rule_account
 from apps.core.context_processors import LOOSE_STATUSES
+from apps.core.errors import open_stored
 from apps.core.paging import Paginator
 from apps.core.permissions import require
+from apps.core.resilience import NOT_QUEUED, enqueue
 from apps.core.utils import audit, current_org, orgs_for_user, use_org
 from apps.documents.models import Document
 from apps.documents.schemas import SCHEMAS, TABLE_FIELDS
 from apps.documents.services.corrections import EDITABLE, FieldValueError, after_correction, correct_field
-from apps.documents.services.ingest import RejectedFile, ingest_bytes
+from apps.documents.services.ingest import UNFINISHED, RejectedFile, ingest_bytes, is_stalled
 from apps.shipments.models import Approval, Shipment, ValidationIssue
 from apps.shipments.services.approval import approval_blockers, posting_blockers, shipment_totals
 from apps.shipments.services.matching import ShipmentGone, assign_manually
@@ -217,7 +219,12 @@ def upload(request):
     for level, text in archive_messages(archives):
         messages.add_message(request, level, text)
     for name, doc in duplicates:
-        where = f" It is in {doc.match.shipment.reference}." if hasattr(doc, "match") else ""
+        if hasattr(doc, "match"):
+            where = f" It is in {doc.match.shipment.reference}."
+        elif doc.status in UNFINISHED:   # re-queued by ingest_bytes when its earlier reading was lost
+            where = " It is being read; refresh in a minute to see the result."
+        else:
+            where = ""
         if doc.original_filename and doc.original_filename != name:   # same contents under another name
             messages.info(request, f"{name} has the same contents as {doc.original_filename}, which was uploaded "
                                    f"before, so it was not added again.{where}")
@@ -289,7 +296,7 @@ def shipment_detail(request, pk):
 @login_required
 def document_file(request, pk):
     doc = _document_for(request, pk)
-    response = FileResponse(doc.file.open("rb"), content_type="application/pdf", filename=doc.pdf_filename)
+    response = FileResponse(open_stored(doc.file, "PDF of this document"), content_type="application/pdf", filename=doc.pdf_filename)
     response["Content-Disposition"] = response["Content-Disposition"].replace("attachment", "inline")
     response["Cache-Control"] = "private, max-age=300"
     return response
@@ -313,6 +320,7 @@ def document_detail(request, pk):
         "shipments": Shipment.objects.filter(organization=doc.organization)
         .exclude(status__in=["approved", "posted"]).order_by("-updated_at")[:50],
         "timeline": [e for e in _doc_events(doc)], "doc_types": Document.DocType.choices,
+        "stalled": is_stalled(doc),   # its task was lost; the sweep queues it again (QA-092)
     })
 
 
@@ -573,8 +581,9 @@ def post_to_qbo(request, pk):
         messages.error(request, "Not posted. " + " ".join(held))
     elif conn is None:
         messages.error(request, "Connect QuickBooks or Xero in Settings > Accounting before posting.")
+    elif not enqueue(post_shipment_task, shipment.pk, request.user.pk):
+        messages.error(request, f"Not posted. {NOT_QUEUED}")
     else:
-        post_shipment_task.delay(shipment.pk, request.user.pk)
         audit(shipment.organization, "shipment.post_requested", shipment, actor=request.user, system=conn.system_name)
         messages.success(request, f"Posting to {conn.system_name} started. Bill numbers appear on each invoice when done.")
     return redirect("review:shipment", pk=pk)

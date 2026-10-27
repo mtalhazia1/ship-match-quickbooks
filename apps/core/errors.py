@@ -2,7 +2,7 @@
 import logging
 
 from django.core.cache import cache
-from django.http import HttpResponseServerError
+from django.http import Http404, HttpResponseServerError
 from django.shortcuts import render
 from django.template import loader
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -46,7 +46,21 @@ def permission_denied(request, exception=None):
 
 
 def not_found(request, exception=None):
-    return render(request, "errors/404.html", status=404)
+    message = str(exception) if isinstance(exception, MissingFile) else ""
+    return render(request, "errors/404.html", {"message": message}, status=404)
+
+
+class MissingFile(Http404):
+    """The record exists but its stored file doesn't (a database restored without its media, a failed delete)."""
+
+
+def open_stored(field, what: str = "file"):
+    """Open a stored file for download, or answer 404 saying the file is missing instead of a 500 (QA-099)."""
+    try:
+        return field.open("rb")
+    except OSError:   # FileNotFoundError on disk; storages raise OSError subclasses too
+        log.error("Stored file missing: %s", field.name, exc_info=True)
+        raise MissingFile(f"The {what} is missing from storage. Ask an admin to restore it from a backup.") from None
 
 
 def server_error(request):

@@ -1,7 +1,9 @@
 {$DOMAIN} {
 	encode gzip
+	# Above the app's largest limit (INTAKE_MAX_ARCHIVE_MB, 100 MB ZIPs; inbound email 40 MB) plus form
+	# overhead, so an oversized file gets the app's message, not a bare 413. Raise it with those settings.
 	request_body {
-		max_size 30MB
+		max_size 110MB
 	}
 	reverse_proxy web:8000
 	header {

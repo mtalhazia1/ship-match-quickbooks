@@ -18,6 +18,7 @@ from apps.accounting.models import PaymentSync, QBOConnection, VendorMapping, Xe
 from apps.accounting.services import quickbooks, xero
 from apps.accounting.services.providers import active_connection, provider_for
 from apps.core.permissions import require
+from apps.core.resilience import NOT_QUEUED, enqueue
 from apps.core.utils import audit, current_org, orgs_for_user, use_org
 from apps.shipments.models import Shipment
 
@@ -368,8 +369,10 @@ def check_payments(request):
                                 "An admin can do it in Settings > Accounting.")
         return redirect(back)
     if not settings.CELERY_TASK_ALWAYS_EAGER:
-        sync_org_payments.delay(org.pk, automatic=False, user_id=request.user.pk,
-                                shipment_id=shipment.pk if shipment else None)
+        if not enqueue(sync_org_payments, org.pk, automatic=False, user_id=request.user.pk,
+                       shipment_id=shipment.pk if shipment else None):
+            messages.error(request, f"Payments weren't checked. {NOT_QUEUED}")
+            return redirect(back)
         audit(org, "accounting.payments_checked", shipment or org, actor=request.user, system=conn.system_name,
               queued=True)
         messages.info(request, f"Checking payments in {conn.system_name}. Refresh in a minute to see the result.")

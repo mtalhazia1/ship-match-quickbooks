@@ -14,7 +14,7 @@ from . import llm, locate
 from .classify import classify
 from .errors import friendly, scrub
 from .extract import extract
-from .ocr import TextResult
+from .ocr import TextResult, first_pages
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +56,8 @@ def process_document(doc_id: int, force_type: str | None = None) -> Document:
                 doc.doc_type, doc.classification_confidence = classify(tr.text)
             learned = learning_for(doc, tr.text)  # what reviewers taught us about this vendor
             with learned.prompt_hint():
-                fields, provider = extract(doc.doc_type, tr.text, pdf=data if _send_pdf(tr.method) else None)
+                fields, provider = extract(doc.doc_type, tr.text,
+                                           pdf=first_pages(data) if _send_pdf(tr.method) else None)
             fields = learned.apply(fields, provider)
         doc.llm_usage = _usage(doc.llm_usage if force_type else None, llm.summarize(calls))
         with transaction.atomic():

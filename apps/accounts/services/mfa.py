@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
 
 import pyotp
@@ -10,7 +11,9 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from apps.accounts.models import Profile
+from apps.core.resilience import CACHE_ERRORS
 
+log = logging.getLogger(__name__)
 ISSUER = "ShipMatch"
 RECOVERY_CODE_COUNT = 10
 
@@ -46,9 +49,12 @@ def verify_totp(user, code: str) -> bool:
         if secrets.compare_digest(totp.at(at), code):
             step = int(at // 30)
             key = f"mfa:last-step:{user.pk}"
-            if cache.get(key, -1) >= step:  # a code can be used only once
-                return False
-            cache.set(key, step, 120)
+            try:
+                if cache.get(key, -1) >= step:  # a code can be used only once
+                    return False
+                cache.set(key, step, 120)
+            except CACHE_ERRORS:   # cache down: accept the correct code without the reuse check (QA-094)
+                log.warning("2FA code reuse not checked: cache unreachable")
             return True
     return False
 

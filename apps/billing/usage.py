@@ -11,6 +11,7 @@ one each; the ZIP or batch PDF itself does not; a file received twice counts onc
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import math
 from dataclasses import dataclass
@@ -22,6 +23,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.models import Membership
+from apps.core.resilience import CACHE_ERRORS
 from apps.documents.models import Document
 from apps.documents.services.ingest import RejectedFile
 
@@ -123,19 +125,24 @@ def usage_for(org, account=None, limits: Limits | None = None, now: datetime | N
 def cached_usage(org) -> Usage | None:
     """For banners: at most one count per organization per minute."""
     key = f"billing:usage:{org.pk}"
-    hit = cache.get(key)
+    try:
+        hit = cache.get(key)
+    except CACHE_ERRORS:   # cache down: count every time instead (QA-094)
+        hit = None
     if hit is not None:
         return hit
     account = account_for(org) if settings.BILLING_ENABLED else None
     if account is None or not account.is_billed:
         return None
     usage = usage_for(org, account)
-    cache.set(key, usage, 60)
+    with contextlib.suppress(*CACHE_ERRORS):
+        cache.set(key, usage, 60)
     return usage
 
 
 def forget_cached_usage(org_id: int) -> None:
-    cache.delete(f"billing:usage:{org_id}")
+    with contextlib.suppress(*CACHE_ERRORS):
+        cache.delete(f"billing:usage:{org_id}")
 
 
 # --------------------------------------------------------------------------- intake gate

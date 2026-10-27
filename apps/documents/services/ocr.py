@@ -48,7 +48,7 @@ def read_text(pdf_bytes: bytes) -> TextResult:
         from .llm import LLMError, transcribe_pdf
 
         try:
-            ocr = transcribe_pdf(pdf_bytes)
+            ocr = transcribe_pdf(first_pages(pdf_bytes))
         except LLMError as e:
             log.warning("Claude OCR failed: %s", e)
             return TextResult(text, n, True, "none")
@@ -80,14 +80,37 @@ def textract_text(pdf_bytes: bytes) -> str:
     return textract_read(pdf_bytes)[0]
 
 
+def first_pages(pdf_bytes: bytes, limit: int | None = None) -> bytes:
+    """The PDF cut to its first OCR_MAX_PAGES pages, for paid reading (QA-098). Unchanged when it is shorter
+    or can't be rewritten."""
+    from pypdf import PdfReader, PdfWriter
+
+    limit = limit or settings.OCR_MAX_PAGES
+    try:
+        reader = PdfReader(io.BytesIO(pdf_bytes), strict=False)
+        if len(reader.pages) <= limit:
+            return pdf_bytes
+        writer = PdfWriter()
+        for page in reader.pages[:limit]:
+            writer.add_page(page)
+        out = io.BytesIO()
+        writer.write(out)
+    except Exception:   # pypdf raises many kinds of errors for odd files; send it whole rather than not at all
+        log.warning("Could not shorten a PDF for reading", exc_info=True)
+        return pdf_bytes
+    log.info("Reading the first %s of %s pages", limit, len(reader.pages))
+    return out.getvalue()
+
+
 def textract_read(pdf_bytes: bytes) -> tuple[str, list]:
-    """OCR every page with Textract. Returns the text and the word boxes (for evidence highlighting)."""
+    """OCR each page (up to OCR_MAX_PAGES) with Textract. Returns the text and the word boxes (for evidence
+    highlighting)."""
     import boto3
 
     client = boto3.client("textract", region_name=settings.AWS_REGION)
     page_texts, words = [], []
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        for number, page in enumerate(pdf.pages, start=1):
+        for number, page in enumerate(pdf.pages[:settings.OCR_MAX_PAGES], start=1):
             img = page.to_image(resolution=200).original
             buf = io.BytesIO()
             img.save(buf, format="PNG")

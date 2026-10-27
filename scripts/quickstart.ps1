@@ -59,7 +59,7 @@ Run $py @("-c", "import sys; print('Using Python', sys.version.split()[0])")
 
 Write-Host "Installing packages (first run takes a few minutes) ..."
 Run $py @("-m", "pip", "install", "--quiet", "--upgrade", "pip")
-Run $py @("-m", "pip", "install", "--quiet", "-r", "requirements.txt")
+Run $py @("-m", "pip", "install", "--quiet", "-r", "requirements-dev.lock")   # exact versions: the app as deployed, plus pytest and ruff
 
 Run $py @("manage.py", "migrate", "-v", "0")
 Run $py @("manage.py", "seed_demo")

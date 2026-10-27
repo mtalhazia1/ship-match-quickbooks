@@ -11,6 +11,7 @@ Requests are rate limited per key or per user (API_RATE_LIMIT_PER_MINUTE).
 """
 from __future__ import annotations
 
+import logging
 import time
 from datetime import date, datetime
 from typing import Any, Literal, Optional
@@ -29,11 +30,14 @@ from ninja.security.session import SessionAuth
 from apps.accounts.models import ApiKey
 from apps.accounts.services.apikeys import verify
 from apps.core.permissions import PERMISSION_MIN_ROLE, ROLE_RANK, has_perm
+from apps.core.resilience import CACHE_ERRORS
 from apps.core.utils import audit, orgs_for_user
 from apps.documents.models import Document
 from apps.documents.services.ingest import RejectedFile, ingest_bytes
 from apps.integrations import apiscopes
 from apps.shipments.models import Shipment
+
+log = logging.getLogger(__name__)
 
 
 class ApiKeyAuth(HttpBearer):
@@ -202,12 +206,16 @@ def _rate_limit(request) -> None:
         return
     who = f"key:{request.api_key.pk}" if getattr(request, "api_key", None) else f"user:{request.user.pk}"
     bucket = f"api-rate:{who}:{int(time.time() // 60)}"
-    cache.add(bucket, 0, 70)
     try:
-        n = cache.incr(bucket)
-    except ValueError:  # expired between add and incr
-        cache.set(bucket, 1, 70)
-        n = 1
+        cache.add(bucket, 0, 70)
+        try:
+            n = cache.incr(bucket)
+        except ValueError:  # expired between add and incr
+            cache.set(bucket, 1, 70)
+            n = 1
+    except CACHE_ERRORS:   # cache down: serve the request unlimited rather than fail it (QA-094)
+        log.warning("API rate limit skipped: cache unreachable")
+        return
     if n > limit:
         raise HttpError(429, f"Rate limit is {limit} requests per minute. Try again shortly.")
 

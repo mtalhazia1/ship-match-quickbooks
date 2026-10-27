@@ -140,6 +140,9 @@ def request_post(shipment: Shipment, user, *, batch_id: str = "") -> Outcome:
     reasons = post_blockers(s, user)
     if reasons:
         return Outcome(s, False, reasons)
-    post_shipment_task.delay(s.pk, user.pk)
+    from apps.core.resilience import NOT_QUEUED, enqueue
+
+    if not enqueue(post_shipment_task, s.pk, user.pk):
+        return Outcome(s, False, [NOT_QUEUED])
     audit(s.organization, "shipment.post_requested", s, actor=user, **({"batch_id": batch_id} if batch_id else {}))
     return Outcome(s, True)

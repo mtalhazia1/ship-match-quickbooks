@@ -12,6 +12,8 @@ PASSWORD = ("This PDF is protected with a password, so ShipMatch can't read it. 
             "PDF to make an unprotected copy, and upload that.")
 DAMAGED = ("This file isn't a readable PDF. It may be damaged or cut short. Open the original, save it as PDF "
            "again, and upload that.")
+TOO_SLOW = ("Reading this file took too long, so it was stopped. It may be very long or unusually built: split "
+            "it into smaller PDFs, or print it to a new PDF, and upload that.")
 GENERIC = ("ShipMatch couldn't read this file. Try processing it again; if it keeps failing, upload it again, "
            "as a PDF if you can.")
 
@@ -23,6 +25,8 @@ _PATH = re.compile(r"(?:[A-Za-z]:[\\/]|/(?:home|usr|var|srv|opt|app|tmp|Users)/)
 
 def _classify(text: str, exception_name: str = "") -> str:
     lowered = f"{exception_name} {text}".lower()
+    if "timelimitexceeded" in lowered:   # Celery stopped the task (DOCUMENT_TASK_TIME_LIMIT, QA-098)
+        return TOO_SLOW
     if any(word in lowered for word in _PASSWORD_WORDS):
         return PASSWORD
     if any(word in lowered for word in _DAMAGED_WORDS):

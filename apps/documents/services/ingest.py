@@ -14,6 +14,7 @@ import re
 
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from apps.core.models import Organization
 from apps.core.utils import audit
@@ -21,6 +22,10 @@ from apps.documents.models import Document, IngestedEmail
 
 log = logging.getLogger(__name__)
 MAX_BYTES = 25 * 1024 * 1024  # default; the real limits are INTAKE_MAX_FILE_MB / INTAKE_MAX_ARCHIVE_MB
+# A document still unread this long after it was queued lost its task (broker down or emptied, worker killed).
+STALE_AFTER = timezone.timedelta(minutes=15)
+# Uploading the same file again re-queues it sooner: the person is asking for it now. A second run is harmless.
+RESEND_AFTER = timezone.timedelta(minutes=2)
 
 
 class RejectedFile(ValueError):
@@ -85,6 +90,8 @@ def ingest_bytes(org: Organization, filename: str, content: bytes, source: str =
     existing = Document.objects.filter(organization=org, sha256=sha).first()
     if existing:
         audit(org, "document.duplicate_file", existing, actor=actor, filename=filename)
+        if process != "none" and is_stalled(existing, after=RESEND_AFTER):   # sending it again is how people retry (QA-091)
+            dispatch(existing, process)
         return existing, False
     try:
         return _store(org, filename, content, kind, sha, source, email, actor, process, parent)
@@ -146,8 +153,22 @@ def dispatch(doc: Document, process: str | None = None) -> Document:
         with processing_mode("sync"):
             return process_document(doc.pk)
     if process == "async":
-        from apps.documents.tasks import process_document_task
-
         pk = doc.pk
-        transaction.on_commit(lambda: process_document_task.delay(pk))
+        transaction.on_commit(lambda: queue(pk))
     return doc
+
+
+def queue(doc_id: int) -> bool:
+    """Hand a stored document to the background worker. With the broker unreachable the document stays
+    "received" and the stalled-document sweep queues it later: the upload itself still succeeds (QA-091)."""
+    from apps.core.resilience import enqueue
+    from apps.documents.tasks import process_document_task
+
+    return enqueue(process_document_task, doc_id)
+
+
+UNFINISHED = (Document.Status.RECEIVED, Document.Status.EXTRACTED)   # reading or matching never completed
+
+
+def is_stalled(doc: Document, after=STALE_AFTER) -> bool:
+    return doc.status in UNFINISHED and doc.updated_at < timezone.now() - after

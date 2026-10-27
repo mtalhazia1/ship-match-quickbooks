@@ -122,6 +122,17 @@ The session 08–13 commits were replayed onto `main` of `mtalhazia1/ship-match-
 
 Timing **My work as `approver`**, who has a USD 50,000 approval limit, showed that **both versions still ran about 7 queries per ready shipment** for a user with a limit. Section 3b had been measured only as `admin`, who has no limit. With 652 ready shipments: `mtalhazia1` version 2,001 queries and 2.25 s, `fix/qa-session-13` 1,407 queries and 1.61 s. The cause was `Document.field()`, which ran its own query and ignored `prefetch_related("fields")`, so the per-document field reads in `shipment_totals` were never batched. It now uses prefetched fields, and `prefetch_approval(with_totals=True)` loads every shipment's documents at once. Result: **50 queries, 0.26 s** as `approver`, and 88 queries, 0.17 s as `admin`. Two tests cover it: My work's query count does not grow with shipments when the approver has a limit (it failed before the fix), and `field()` makes no query on prefetched fields.
 
-### 7f. Test data left behind
+### 7f. Excel downloads switched to XlsxWriter (13 Oct)
+
+A profile of the documents Excel export showed nearly all its time in openpyxl writing 372,771 cells (6,111 rows × 61 columns) one at a time; the database part was small, and write-only mode was already in use. A benchmark on the same shape: openpyxl 13.7 s, XlsxWriter 5.7 s. The three Excel writers (exports, month-end journal, landed cost) now use XlsxWriter through `apps/core/xlsx.py`. The seven Excel downloads were saved before and after the change and compared cell by cell (about 400,000 cells; values, types, number formats, bold, font size, fills, column widths, frozen panes): identical.
+
+| Download | Before | After | Size before → after |
+|---|---|---|---|
+| Documents Excel (API and web) | 15.7–16.1 s | 6.2–6.3 s | 1,240 → 469 KB |
+| Month-end journal | 7.8 s | 4.6 s | 571 → 530 KB |
+| Shipments Excel | 7.0 s | 4.3 s | 348 → 253 KB |
+| Issues Excel | 3.1 s | 1.6 s | 199 → 167 KB |
+
+### 7g. Test data left behind
 
 None. All work ran on a scratch copy of the database, and the temporary worktree was removed.

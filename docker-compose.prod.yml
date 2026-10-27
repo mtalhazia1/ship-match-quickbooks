@@ -18,7 +18,7 @@ x-prod-env: &prod-env
 services:
   web:
     user: app
-    command: sh -c "python manage.py migrate && python manage.py collectstatic --no-input && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120 --access-logfile -"
+    command: sh -c "python manage.py migrate && python manage.py collectstatic --no-input && gunicorn config.wsgi:application -c config/gunicorn.conf.py"   # workers: config/gunicorn.conf.py
     volumes: !override
       - media:/app/media   # uploaded PDFs survive rebuilds (or set S3_BUCKET to use S3/MinIO)
     ports: !reset []

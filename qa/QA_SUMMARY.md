@@ -1,9 +1,31 @@
-# ShipMatch QA — prioritised summary of sessions 01–13
+# ShipMatch QA — prioritised summary of sessions 01–21
 
 Period: 3–4 Oct 2026. Method: exploratory testing in the in-app browser, issues listed only (nothing was fixed), against the local demo data plus the empty **Northwind Traders (test)** org for destructive tests. Detail, repro steps and evidence are in the per-session logs:
-[01 platform sweep](QA_SESSION_01.md) · [02 approval loop](QA_SESSION_02.md) · [03 disputes & month-end](QA_SESSION_03.md) · [04 intake & integrations](QA_SESSION_04.md) · [05 accounts & admin](QA_SESSION_05.md) · [06 cross-cutting](QA_SESSION_06.md) · [07 gap closing](QA_SESSION_07.md) · [08 webhooks, accounting, DEBUG off](QA_SESSION_08.md) · [09 static files, re-check, tenant sweep](QA_SESSION_09.md) · [10 concurrency](QA_SESSION_10.md) · [11 exports, reset, caching](QA_SESSION_11.md) · [12 PostgreSQL](QA_SESSION_12.md) · [13 scale](QA_SESSION_13.md)
+[01 platform sweep](QA_SESSION_01.md) · [02 approval loop](QA_SESSION_02.md) · [03 disputes & month-end](QA_SESSION_03.md) · [04 intake & integrations](QA_SESSION_04.md) · [05 accounts & admin](QA_SESSION_05.md) · [06 cross-cutting](QA_SESSION_06.md) · [07 gap closing](QA_SESSION_07.md) · [08 webhooks, accounting, DEBUG off](QA_SESSION_08.md) · [09 static files, re-check, tenant sweep](QA_SESSION_09.md) · [10 concurrency](QA_SESSION_10.md) · [11 exports, reset, caching](QA_SESSION_11.md) · [12 PostgreSQL](QA_SESSION_12.md) · [13 scale](QA_SESSION_13.md) · [18 background workers](QA_SESSION_18.md) · [19 production rehearsal](QA_SESSION_19.md) · [20 load on PostgreSQL](QA_SESSION_20.md) · [21 security deep-dive](QA_SESSION_21.md)
+
+Sessions 14–17 (planned: webhook delivery to a real receiver, a real mailbox, QuickBooks/Xero OAuth) have not been run.
 
 **Totals:** 73 numbered issues (QA-001 … QA-074; QA-047 was never used). 2 Critical/High-security, 5 High/Medium-high, 22 Medium, 36 Low, 8 "verify / decide". Session 07 added QA-065 … QA-074 and widened QA-002, QA-003, QA-010, QA-025. Several were re-explained or downgraded later; the table below uses the latest understanding.
+
+**Sessions 18–21 (16–17 Oct 2026, run in the order 18, 21, 19, 20) added 15 issues, QA-091 … QA-105.** First runs with real Celery workers and Redis (18), a role-by-route security matrix of 2,280 web requests and 119 API cases (21: no isolation or permission gaps), the production Docker stack behind Caddy with a backup/restore drill (19) and 25 concurrent users on PostgreSQL (20). All 15 are fixed on branch `fix/qa-sessions-18-21` (PR #3; see Fix status):
+
+| # | Severity | Issue | Status |
+|---|---|---|---|
+| QA-101 | High | Production started with the public default `DJANGO_SECRET_KEY` when the key was missing | **Fixed 19 Oct** |
+| QA-091 | Medium/High | A document uploaded while the broker was down returned 500, was never read and could not be re-sent | **Fixed 19 Oct** |
+| QA-102 | Medium | `local-test-accounts.txt` (with a password) was copied into the production image | **Fixed 19 Oct** |
+| QA-092 | Medium | A document whose worker died mid-read stays "Extracted" for an hour with a misleading message | **Fixed 24 Oct** (the sweep re-reads it after 15 min; the page says it is being retried). Visibility timeout left at 1 h on purpose: webhook retries are scheduled up to 6 h ahead |
+| QA-093 | Medium | Production Redis has no persistence: queued work is lost on a crash | **Fixed 24 Oct** |
+| QA-094 | Medium | With the cache down, sign-in and every API call return 500 | **Fixed 24 Oct** |
+| QA-097 | Medium | Password reset has no rate limit (inbox flooding) | **Fixed 24 Oct** |
+| QA-098 | Medium | Small hostile PDFs (20,000 pages, deep nesting) hold a worker; no page limit, no task time limit, OCR on every page | **Fixed 24 Oct** |
+| QA-105 | Medium | gunicorn runs a fixed 3 sync workers: 25 busy users wait 3–5 s per page | **Fixed 24 Oct** |
+| QA-103 | Low/Medium | Caddy's 30 MB body limit is below the app's ZIP (100 MB) and email (40 MB) limits: bare 413 | **Fixed 24 Oct** |
+| QA-095 | Low | "Post bills" and "Check payments now" return 500 when the broker is down | **Fixed 24 Oct** |
+| QA-096 | Low | Tasks for rows deleted while queued fail with `DoesNotExist` | **Fixed 24 Oct** |
+| QA-099 | Low | A statement whose stored file is missing gives 500 | **Fixed 24 Oct** |
+| QA-100 | Low | Dependencies are not pinned; no lock file; test tools in the production image | **Fixed 24 Oct** |
+| QA-104 | Low | `deploy/backup.sh` doesn't back up the PDFs in the default setup | **Fixed 24 Oct** |
 
 **Session 13 continued (12 Oct 2026, same data set, scratch copy of the database):** the fixes hold (My work 0.34 s, month-end page 2.2 s, API documents list 9 queries). 30 more pages were timed with no issues. One new issue: **QA-090** (Medium on SQLite, fixed the same day): the Savings CSV export returns HTTP 500 once the period holds about 2,000 catches. It is a regression from the QA-089 fix: a prefetch over every catch exceeds SQLite's expression-depth limit, and the code before `ebff5e8` returned the file in 0.76 s. The slowest downloads are the documents Excel (17.8 s) and the month-end journal (5–10 s).
 
@@ -19,7 +41,7 @@ Period: 3–4 Oct 2026. Method: exploratory testing in the in-app browser, issue
 
 ---
 
-## Fix status (updated 12 Oct 2026)
+## Fix status (updated 24 Oct 2026)
 
 The fixes up to 7 Oct are in commits `0aea335`, `0d04083` and `fdbe801` (earlier branch) and `fe46865` (`fix/qa-remaining`). On 12 Oct the two lines of work were combined on `main` of `mtalhazia1/ship-match-quickbooks`: the 8–9 Oct fixes made there (`claude/optimistic-johnson-s7l5qg`, merged as PR #1 and #2) plus the session 08–13 fixes from `fix/qa-session-08` and `fix/qa-session-13`.
 
@@ -37,7 +59,26 @@ The fixes up to 7 Oct are in commits `0aea335`, `0d04083` and `fdbe801` (earlier
 - **Fixed in sessions 08–13:** QA-075, 076, 077, 078, 079, 080, 081, 083, 084, 085, 086, 088, 089 (details in each session log).
 - **Fixed 12 Oct while combining:** My work for an approver **with an approval limit** still ran about 7 queries per ready shipment in both versions (3,000 shipments: 2,001 queries, 2.25 s). `Document.field()` ignored prefetched fields; it now reads them, and `prefetch_approval(with_totals=True)` loads the documents in bulk: 50 queries, 0.26 s.
 - **Fixed 12 Oct:** QA-090 (Savings CSV export 500 once the catches span more than about 1,000 shipments on SQLite; the shipment prefetch now runs in batches of 500; 0.49 s at 3,000 shipments).
-- **Open:** QA-082 (no `Cache-Control` on signed-in pages, verify), the Excel-journal and documents-Excel speed (openpyxl cell writing; `lxml` did not help) and the remaining export speed (a rewrite on plain queries).
+- **Fixed 13 Oct:** QA-082 (every response to a signed-in user or an API key now carries `Cache-Control: private, no-store`, unless the view sets its own; the original-file views keep `private, max-age=300` so the evidence viewer does not download a PDF twice).
+- **Improved 13 Oct (rest of QA-085 and QA-088):** Excel files are now written with XlsxWriter instead of openpyxl (openpyxl still reads uploaded spreadsheets). At 3,000 shipments: documents Excel 15.7 → 6.3 s, month-end journal 7.8 → 4.6 s, shipments Excel 7.0 → 4.3 s, issues Excel 3.1 → 1.6 s, and the files are up to 60% smaller. All seven Excel downloads were compared cell by cell with the old output (values, types, number formats, fonts, fills, widths, frozen panes): identical.
+- **Fixed 19 Oct (`fix/qa-sessions-18-21`):**
+  - QA-101: with `DJANGO_DEBUG=0` the settings refuse to load (web, worker and beat) when `DJANGO_SECRET_KEY` is missing, the built-in default, `change-me` or `django-insecure-…`, or `FIELD_ENCRYPTION_KEY` is missing or not a Fernet key.
+  - QA-091: queuing a document never fails the upload (a broker error is logged and the document stays "received"); uploading an unread document again re-queues it after 2 minutes; a beat task (`requeue_stalled_documents`, every 5 minutes) re-queues documents left "received" or "extracted" for 15 minutes, at most 3 times, then marks them as errors. While the broker is down it waits without using up attempts. Also covers QA-092's stuck documents.
+  - QA-102: `.dockerignore` leaves out `local-test-accounts.txt`, `.env.*`, `tests/` and `qa/`.
+- **Fixed 24 Oct (`fix/qa-sessions-18-21`):**
+  - QA-092: a document stuck mid-read says it is being retried instead of "no bill of lading … was found" (the QA-091 sweep re-reads it). The broker's visibility timeout is left at its 1-hour default on purpose: webhook retries are scheduled up to 6 hours ahead, and a shorter timeout would deliver them twice.
+  - QA-093: Redis writes an append-only file to a `redisdata` volume, so queued tasks survive a crash or a re-created container.
+  - QA-094: with the cache unreachable, sign-in, 2FA, the API rate limit and the plan-usage banner carry on without their counters (logged) instead of returning 500. Chosen: fail open, as the password and the 2FA code are still checked.
+  - QA-095: "Post bills" (single and bulk) and "Check payments now" say "Couldn't start it … try again in a minute" when the broker is down; nothing is recorded.
+  - QA-096: document and posting tasks for rows deleted while queued return "skipped".
+  - QA-097: password-reset emails are limited to 3 per address and 20 per IP per hour (`PASSWORD_RESET_PER_EMAIL_PER_HOUR`, `PASSWORD_RESET_PER_IP_PER_HOUR`); extra requests get the same page and no email.
+  - QA-098: PDFs over `INTAKE_MAX_PAGES` (500) are refused at intake with a clear message; reading a document stops after `DOCUMENT_TASK_TIME_LIMIT` (300 s, prefork workers) with a plain-language error; OCR and the PDF sent to the AI cover at most `OCR_MAX_PAGES` (50) pages.
+  - QA-099: downloading a document, original or statement whose stored file is gone answers 404 "missing from storage"; a statement's file is deleted only after its row is committed.
+  - QA-100: `requirements.lock` (production, hash-checked, installed with `--require-hashes --no-deps`) and `requirements-dev.lock` (the same versions plus pytest, ruff and pip-audit; used by the quick start). pytest is no longer in the image. `pip-audit` over the lock found three pypdf CVEs in 6.21.1; the minimum is now 6.21.2 and both locks audit clean. The local venv was moved to the locked versions.
+  - QA-103: Caddy accepts request bodies up to 110 MB (the app's largest limit is 100 MB ZIPs), so oversized files get the app's message.
+  - QA-104: `deploy/backup.sh` now dumps the database and tars `/app/media` through the production compose files, like `deploy-droplet.sh backup`, and is executable.
+  - QA-105: gunicorn reads `config/gunicorn.conf.py`: 2 × CPUs + 1 processes (at most 9), 4 threads each (`gthread`), overridable with `GUNICORN_WORKERS` / `GUNICORN_THREADS`.
+- **Open:** the CSV exports of shipments and documents still take about 4 s at 3,000 shipments (building about 50,000 Django objects; a rewrite on plain queries would help).
 - **Not a defect on inspection:** QA-019 (different bytes, not duplicates), QA-037 and QA-052 (messages exist and render), QA-045, QA-070, QA-087 (synthetic data), QA-023 (`docker-compose.prod.yml` and the droplet script set `DJANGO_DEBUG=0`), QA-016 (`/try/` and `/signup/` are off unless `DEMO_MODE` / `SIGNUP_ENABLED` is set).
 - **Left open, product decisions:** QA-022 (which total approval limits use), 040 (per-company shipment numbers), 059 (dark mode, forced colours, rem font sizes).
 

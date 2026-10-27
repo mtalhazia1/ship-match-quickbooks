@@ -803,3 +803,58 @@ def test_savings_export_with_more_than_a_thousand_shipments(client, org, approve
     lines = r.content.decode().splitlines()
     assert len(lines) == n + 1
     assert sum("SHP-SAV" in line for line in lines) == n
+
+
+# ---------------------------------------------------------------- QA-082: no copies of signed-in pages
+
+
+@pytest.mark.django_db
+def test_signed_in_pages_and_downloads_are_not_stored(client, approver, org):
+    from apps.accounts.models import ApiKey
+    from apps.accounts.services.apikeys import create_key
+
+    assert "Cache-Control" not in client.get(reverse("roi:calculator")).headers    # public page: unchanged
+    login = client.get(reverse("accounts:login"))
+    assert "no-store" in login["Cache-Control"]                                     # its own never_cache stays
+    client.force_login(approver)
+    for name in ("core:dashboard", "review:queue", "savings:export", "core:audit"):
+        r = client.get(reverse(name))
+        assert r.status_code == 200, name
+        assert r["Cache-Control"] == "private, no-store", name
+    client.logout()
+    _, token = create_key(org, "ERP", ApiKey.Role.VIEWER, approver, None)
+    r = client.get(f"/api/{org.slug}/shipments", HTTP_AUTHORIZATION=f"Bearer {token}")
+    assert r.status_code == 200 and r["Cache-Control"] == "private, no-store"
+
+
+# ---------------------------------------------------------------- Excel files are written with XlsxWriter
+
+
+def test_xlsx_book_writes_cells_the_way_openpyxl_did():
+    import io
+    from datetime import date, datetime
+    from decimal import Decimal
+
+    from openpyxl import load_workbook
+
+    from apps.core.xlsx import Book
+
+    out = io.BytesIO()
+    book = Book(out)
+    ws = book.sheet("A sheet name that is longer than Excel allows")
+    book.write_row(ws, 0, ["=HYPERLINK(\"x\")", "00123", Decimal("12.50"), 3, date(2026, 9, 30),
+                           datetime(2026, 9, 30, 14, 5), "", None, True])
+    book.write(ws, 1, 0, None, num_format="#,##0.00", bold=True)       # an empty cell keeps its formatting
+    book.close()
+    sheet = load_workbook(io.BytesIO(out.getvalue())).active
+    assert sheet.title == "A sheet name that is longer than"[:31]
+    cells = list(sheet.iter_rows(min_row=1, max_row=1))[0]
+    assert cells[0].value == "=HYPERLINK(\"x\")" and cells[0].data_type == "s"     # text, never a formula
+    assert cells[1].value == "00123"                                              # leading zeros kept
+    assert cells[2].value == 12.5 and cells[3].value == 3
+    assert cells[4].value == datetime(2026, 9, 30) and cells[4].number_format == "yyyy-mm-dd"
+    assert cells[5].number_format == "yyyy-mm-dd h:mm:ss"
+    assert cells[6].value is None and cells[7].value is None                      # "" and None stay empty
+    assert cells[8].value is True
+    blank = sheet.cell(row=2, column=1)
+    assert blank.value is None and blank.number_format == "#,##0.00" and blank.font.b

@@ -27,8 +27,7 @@ from apps.core.utils import audit
 from apps.demo.models import TrySubmission
 from apps.documents.models import Document
 from apps.documents.schemas import SCHEMAS
-from apps.documents.services.ingest import ingest_bytes, safe_filename
-from apps.documents.tasks import process_document_task
+from apps.documents.services.ingest import ingest_bytes, queue, safe_filename
 
 log = logging.getLogger(__name__)
 SANDBOX_NAME = "Try page upload (deleted automatically)"
@@ -192,7 +191,7 @@ def submit(upload, iph: str) -> tuple[TrySubmission, str]:
         sub.save(update_fields=["document"])
     _incr(_global_key(), 86400 + 3600)
     # Committed above, so a worker can see it. Celery runs this inline when CELERY_TASK_ALWAYS_EAGER=1.
-    process_document_task.delay(doc.pk)
+    queue(doc.pk)   # broker down: the stalled-document sweep reads it later
     return sub, token
 
 

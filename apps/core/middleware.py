@@ -152,6 +152,9 @@ class SecurityHeadersMiddleware:
 
     Scripts may only come from this site (no inline scripts). The Django admin and the API
     docs page are excluded because they ship their own inline code.
+
+    Anything sent to a signed-in user or an API key is `private, no-store` unless the view chose
+    otherwise, so a shared browser or a proxy keeps no copy of pages and exports after sign-out (QA-082).
     """
 
     EXEMPT_PREFIXES = ("/admin/",)
@@ -174,6 +177,10 @@ class SecurityHeadersMiddleware:
     def __call__(self, request):
         response = self.get_response(request)
         response.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+        user = getattr(request, "user", None)
+        if ((user is not None and user.is_authenticated) or getattr(request, "api_key", None)
+                or "HTTP_AUTHORIZATION" in request.META):
+            response.setdefault("Cache-Control", "private, no-store")
         if (response.get("Content-Type", "").startswith("text/html")
                 and not request.path.startswith(self.EXEMPT_PREFIXES)):
             response.setdefault("Content-Security-Policy", self.policy)

@@ -62,6 +62,10 @@ services:
 
   redis:
     image: redis:7
+    # Queued tasks (documents to read, alert and webhook retries) survive a crash or a re-created container.
+    command: redis-server --appendonly yes --appendfsync everysec
+    volumes:
+      - redisdata:/data
     ports:
       - "6379:6379"
     healthcheck:
@@ -95,4 +99,5 @@ services:
 
 volumes:
   pgdata:
+  redisdata:
   miniodata:
